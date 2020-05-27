@@ -23,6 +23,7 @@ UK19_PH <- fread("../../UK19_PHLOI.csv")
 CS78_IBD <- fread("../../../CS/Data/IBD78.csv")
 CS98_IBD <- fread("../../../CS/Data/IBD98.csv")
 CS07_IBD <- fread("../../../CS/Data/IBD07.csv")
+GM16_IBD <- fread("../../../CS/Data/GMEP_VEG_IBD_XNEST1.csv")
 
 # metadata
 BHPH_NAMES <- read.csv("../../../CS/Data/BHPH_names.csv")
