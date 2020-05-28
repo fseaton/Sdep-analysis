@@ -5,6 +5,7 @@ library(ggplot2)
 theme_set(theme_classic())
 library(gganimate)
 library(mice)
+library(janitor)
 
 # atmospheric data plots ####
 # Sdep maps
@@ -260,29 +261,32 @@ ggplot(PH_diff_long, aes(x = pH)) +
   geom_vline(xintercept = 0)
 
 
-# breakdown by habitat data
-# habitat data manipulation
-hab07 <- select(CS07_IBD, REP_ID = REP_ID07, BH_CODE = BH07) %>%
-  left_join(select(BHPH_NAMES, BH07 = BROAD_HABITAT, BH_CODE)) %>%
-  select(-BH_CODE) %>%
+# breakdown by AVC data
+# AVC data manipulation
+hab07 <- select(CS07_IBD, REP_ID = REP_ID07, AVC07) %>%
   unique()
-hab98 <- select(CS98_IBD, REP_ID = REP_ID98, BH_CODE = BH98) %>%
-  left_join(select(BHPH_NAMES, BH98 = BROAD_HABITAT, BH_CODE))%>%
-  select(-BH_CODE)%>%
+hab98 <- select(CS98_IBD, REP_ID = REP_ID98, AVC98) %>%
   unique()
-hab78 <- select(CS78_IBD, REP_ID = REP_ID78, BH_CODE = BH78) %>%
-  left_join(select(BHPH_NAMES, BH78 = BROAD_HABITAT, BH_CODE))%>%
-  select(-BH_CODE)%>%
+hab78 <- select(CS78_IBD, REP_ID = REP_ID78, AVC78) %>%
   unique()
 
-# create combined broad habitat variable, if 07 has broad habitat use that
-# otherwise use 98 then 78. There are only 3 sites with no habitat data and I
-# can't see how to get theirs as they don't appear in 2016/19.
+# create combined AVC variable, if 07 has AVC use that otherwise use 98 then 78.
+# There are only 3 sites with no AVC data and I can't see how to get theirs as
+# they don't appear in 2016/19.
 hab <- full_join(hab07, hab98) %>% full_join(hab78) %>%
   mutate_if(is.factor, as.character) %>%
-  mutate(BH = ifelse(!is.na(BH07), BH07,
-                     ifelse(!is.na(BH98), BH98,
-                            ifelse(!is.na(BH78), BH78, NA))))
+  mutate(AVC = ifelse(!is.na(AVC07), AVC07,
+                     ifelse(!is.na(AVC98), AVC98,
+                            ifelse(!is.na(AVC78), AVC78, NA)))) %>%
+  mutate(AVC_desc = recode(AVC,
+                           `1` = "Crops/Weeds",
+                           `2` = "Tall herb/grass",
+                           `3` = "Fertile grassland",
+                           `4` = "Infertile grassland",
+                           `5` = "Lowland wooded",
+                           `6` = "Upland wooded",
+                           `7` = "Moorland grass/mosaic",
+                           `8` = "Heath/bog"))
 
 # calculate total change in pH over survey years
 PH$change_dir <- rowSums(select(PH, diff7898, diff9807, diff0716, diff0719), na.rm = TRUE)
@@ -293,29 +297,9 @@ filter(PH,change_dir == 0) %>% select(starts_with("diff")) %>%
 PH$change_dir <- ifelse(PH$change_dir == 0 & !is.na(PH$diff7807), PH$diff7807, PH$change_dir) 
 PH$change_dir <- ifelse(PH$change_dir == 0 & !is.na(PH$diff7816), PH$diff7816, PH$change_dir) 
 
-# Combine pH and habitat data and convert to long format
-PH_long_hab <- left_join(PH, select(hab, REP_ID, BH07 = BH)) %>%
+# Combine pH and AVC data and convert to long format
+PH_long_hab <- left_join(PH, select(hab, REP_ID, AVC = AVC_desc)) %>%
   droplevels() %>%
-  mutate(BH07 = recode_factor(BH07,
-                              "Boundary and Linear Features" = "Other",
-                              "Littoral Sediment" = "Coastal",
-                              "Sea" = "Coastal",
-                              "Supra-littoral Rock" = "Coastal",
-                              "Supra-littoral Sediment" = "Coastal",
-                              "Urban" = "Other",
-                              "Standing Open Waters and Canals" = "Other",
-                              "Montane" = "Other",
-                              "Inland Rock" = "Other",
-                              "Calcareous Grassland" = "Other",
-                              "Arable and Horticulture" = "Arable",
-                              "Broadleaved Mixed and Yew Woodland" = "Broadleaf",
-                              "Coniferous Woodland" = "Conifer",
-                              "Dwarf Shrub Heath" = "Heath",
-                              "Fen, Marsh, Swamp" = "Marsh",
-                              "Acid Grassland" = "Acid Gr",
-                              "Improved Grassland" = "Improved Gr",
-                              "Neutral Grassland" = "Neutral Gr")) %>%
-  mutate(BH07 = replace_na(BH07, "Other")) %>%
   pivot_longer(starts_with("PH"),
                values_to = "pH",
                values_drop_na = TRUE) %>%
@@ -323,66 +307,101 @@ PH_long_hab <- left_join(PH, select(hab, REP_ID, BH07 = BH)) %>%
   mutate(year = ifelse(year == 2000, 1998, year))
 
 # plots of pH change over time
-ggplot(PH_long_hab, aes(x = year, y = pH, group = REP_ID)) +
+PH_long_hab %>% 
+  filter(!is.na(AVC)) %>%
+  ggplot(aes(x = year, y = pH, group = REP_ID)) +
   geom_line(alpha = 0.5, aes(colour = change_dir) )+
   geom_jitter(size = 0.2, width = 1, height = 0, shape = 16, alpha = 0.8,
               aes(colour = change_dir)) +
-  facet_wrap(~BH07) + 
+  facet_wrap(~AVC, nrow = 2) + 
   scale_colour_distiller(palette = "RdBu", direction = 1,
                          limits = c(-1,1)*max(abs(PH_long_hab$change_dir)),
                          name = "pH change", na.value = "white") +
   theme_dark()
-ggsave("pH change over time facetted by habitat.png", path = "Outputs/Graphs/",
-       width = 28, height = 15, units = "cm")
+ggsave("pH change over time facetted by AVC.png", path = "Outputs/Graphs/",
+       width = 28, height = 12, units = "cm")
 
-ggplot(PH_long_hab, aes(x = year, y = pH)) +
+PH_long_hab %>% 
+  filter(!is.na(AVC)) %>%
+  ggplot(aes(x = year, y = pH)) +
   geom_line(alpha = 0.5, aes(colour = change_dir, group = REP_ID))+
   geom_jitter(size = 0.2, width = 1, height = 0, shape = 16, alpha = 0.5,
               colour = "grey50") +
   geom_boxplot(fill= NA, aes(group = year), outlier.shape = NA) +
-  facet_wrap(~BH07) + 
+  facet_wrap(~AVC, nrow = 2) + 
   # geom_smooth(formula = y ~ poly(x,3)) +
   scale_colour_distiller(palette = "RdBu", direction = 1,
                          limits = c(-1,1)*max(abs(PH_long_hab$change_dir)),
                          name = "pH change", na.value = "white") +
   # theme_dark() +
   NULL
-ggsave("pH change over time boxplots facetted by habitat.png", path = "Outputs/Graphs/",
-       width = 28, height = 20, units = "cm")
+ggsave("pH change over time boxplots facetted by AVC.png", path = "Outputs/Graphs/",
+       width = 28, height = 15, units = "cm")
 
-# combine ph difference and habitat data
-PH_diff_long <- left_join(PH_diff_long, hab07) %>%
+# combine ph difference and AVC data
+PH_diff_long <- left_join(PH_diff_long, 
+                          select(hab, REP_ID, AVC = AVC_desc)) %>%
   droplevels()
-summary(PH_diff_long$BH07)
-PH_diff_long <- PH_diff_long %>%
-  mutate(BH07 = recode_factor(BH07,
-                              "Boundary and Linear Features" = "Other",
-                              "Littoral Sediment" = "Other",
-                              "Sea" = "Other",
-                              "Supra-littoral Rock" = "Other",
-                              "Supra-littoral Sediment" = "Other",
-                              "Urban" = "Other",
-                              "Standing Open Waters and Canals" = "Other",
-                              "Bracken" = "Other",
-                              "Inland Rock" = "Other",
-                              "Calcareous Grassland" = "Other",
-                              "Arable and Horticulture" = "Arable",
-                              "Broadleaved Mixed and Yew Woodland" = "Broadleaf",
-                              "Coniferous Woodland" = "Conifer",
-                              "Dwarf Shrub Heath" = "Heath",
-                              "Fen, Marsh, Swamp" = "Marsh",
-                              "Acid Grassland" = "Acid Gr",
-                              "Improved Grassland" = "Improved Gr",
-                              "Neutral Grassland" = "Neutral Gr")) %>%
-  mutate(BH07 = replace_na(BH07, "Other"))
+table(PH_diff_long$AVC)
+get_dupes(PH_diff_long, REP_ID, name)
 
-ggplot(PH_diff_long, aes(x = pH)) + 
+PH_diff_long %>%
+  filter(!is.na(AVC)) %>% 
+  ggplot(aes(x = pH)) + 
   geom_histogram() +
   geom_vline(xintercept = 0) +
-  facet_grid(BH07~name, scales = "free_y")
-ggsave("pH difference histograms facetted by habitat and year.png",
+  facet_grid(AVC ~ name, scales = "free_y")
+ggsave("pH difference histograms facetted by AVC and year.png",
        path = "Outputs/Graphs/", width = 28, height = 24, units = "cm")
 
+# Soil pH in CaCl2 ####
+# Only have pH in CaCl2 data for 2007 onwards
+str(CS78_PH)
+str(CS98_PH)
+str(CS07_PH)
+str(CS16_PH)
+str(UK19_PH)
+
+# data manipulation
+PHC <- full_join(select(CS07_PH, REP_ID, PHC2007 = PH2007_IN_CACL2),
+                select(CS16_PH, REP_ID, PHC2016 = PH_CACL2)) %>%
+  full_join(select(UK19_PH, REP_ID, PHC2019 = PH_CACL)) %>%
+  mutate(pH_change = ifelse(!is.na(PHC2019), PHC2019 - PHC2007,
+                            ifelse(!is.na(PHC2016), PHC2016 - PHC2007, NA))) %>%
+  left_join(unique(select(hab, REP_ID, AVC = AVC_desc)))
+str(PHC)
+summary(PHC)
+md.pattern(PHC)
+
+# histograms of pH CaCl2 change
+PHC %>% filter(!is.na(AVC)) %>%
+  ggplot(aes(x = pH_change)) + geom_histogram() +
+  geom_vline(xintercept = 0) +
+  facet_wrap(~AVC, nrow = 2)
+ggsave("pH CaCl2 change 07 to 1619 facet by AVC.png", path = "Outputs/Graphs/",
+       width = 28, height = 12, units = "cm")
+
+# data manipulation into long format
+PHC_long <- PHC %>%
+  pivot_longer(starts_with("PHC"), names_to = "year",
+               names_prefix = "PHC", values_to = "pH_CaCl2",
+               values_drop_na = TRUE)
+str(PHC_long)
+
+# boxplot/line/scatter plot of pH CaCl2 change over time
+PHC_long %>% mutate(year = as.numeric(year)) %>%
+  filter(!is.na(AVC)) %>%
+  ggplot(aes(x = year, y = pH_CaCl2)) +
+  geom_jitter(shape = 16, size = 0.5, alpha = 0.5,
+              width = 1, height = 0) +
+  geom_boxplot(aes(group = year), fill = NA) +
+  geom_line(aes(group = REP_ID, colour = pH_change), alpha = 0.5) +
+  facet_wrap(~AVC, nrow = 2) +
+  scale_colour_distiller(palette = "RdBu", direction = 1,
+                         limits = c(-1,1)*abs(max(PHC_long$pH_change)))
+ggsave("pH CaCl2 over time boxplots facet by AVC.png",
+       path = "Outputs/Graphs/",
+       width =28, height = 15, units = "cm")
 
 
 # Plant Ellenberg scores ####
@@ -410,11 +429,11 @@ IBD_comb <- full_join(CS07_IBD, CS98_IBD, by = c("REP_ID07" = "REP_ID98")) %>%
   full_join(CS78_IBD, by = c("REP_ID07" = "REP_ID78")) %>%
   full_join(GM16_IBD, by = c("REP_ID07" = "REP_ID16"))
 
-# Use habitat data from 2007 if it is there, otherwise 98 or 78
-IBD_comb$BH_CODE <- ifelse(!is.na(IBD_comb$BH07), IBD_comb$BH07,
-                           ifelse(!is.na(IBD_comb$BH98), IBD_comb$BH98,
-                                  IBD_comb$BH78))
-summary(IBD_comb$BH_CODE)
+# Use AVC data from 2007 if it is there, otherwise 98 or 78
+IBD_comb$AVC <- ifelse(!is.na(IBD_comb$AVC07), IBD_comb$AVC07,
+                           ifelse(!is.na(IBD_comb$AVC98), IBD_comb$AVC98,
+                                  IBD_comb$AVC78))
+summary(IBD_comb$AVC)
 # get plot type from REP_ID
 IBD_comb$PLOT_TYPE <- gsub("[^a-zA-Z]", "", IBD_comb$REP_ID07)
 summary(as.factor(IBD_comb$PLOT_TYPE))
@@ -426,7 +445,16 @@ ELL <- IBD_comb %>%
          diff9807 = R07 - R98,
          diff7816 = R16 - R78,
          diff9816 = R16 - R98,
-         diff0716 = R16 - R07) 
+         diff0716 = R16 - R07,
+         AVC_desc = recode(AVC,
+                           `1` = "Crops/Weeds",
+                           `2` = "Tall herb/grass",
+                           `3` = "Fertile grassland",
+                           `4` = "Infertile grassland",
+                           `5` = "Lowland wooded",
+                           `6` = "Upland wooded",
+                           `7` = "Moorland grass/mosaic",
+                           `8` = "Heath/bog")) 
 # Calculate overall Ell R change
 ELL$Rchange <- rowSums(select(ELL, diff7898, diff9807, diff0716), na.rm = TRUE)
 summary(ELL$Rchange)
@@ -438,51 +466,26 @@ ELL$Rchange <- ifelse(ELL$Rchange == 0 & !is.na(ELL$diff9807), ELL$diff9807, ELL
 ELL$Rchange <- ifelse(ELL$Rchange == 0 & !is.na(ELL$diff7898), ELL$diff7898, ELL$Rchange) 
 summary(ELL$Rchange)
 
-# Convert Ell R change into long format with better named habitats
+# Convert Ell R change into long format
 ELL_diff_long <- ELL %>%
-  select(REP_ID = REP_ID07, BH_CODE, starts_with("diff")) %>%
-  left_join(select(BHPH_NAMES, BH_rec = BROAD_HABITAT, BH_CODE))%>%
-  mutate(BH_rec = recode_factor(BH_rec,
-                                "Boundary and Linear Features" = "Other",
-                                "Littoral Sediment" = "Other",
-                                "Sea" = "Other",
-                                "Supra-littoral Rock" = "Other",
-                                "Supra-littoral Sediment" = "Other",
-                                "Littoral Rock" = "Other",
-                                "Urban" = "Other",
-                                "Standing Open Waters and Canals" = "Other",
-                                "Rivers and Streams" = "Other",
-                                "Montane" = "Other",
-                                "Bracken" = "Other",
-                                "No Allocation" = "Other",
-                                "Inland Rock" = "Other",
-                                "Calcareous Grassland" = "Other",
-                                "Arable and Horticulture" = "Arable",
-                                "Broadleaved Mixed and Yew Woodland" = "Broadleaf",
-                                "Coniferous Woodland" = "Conifer",
-                                "Dwarf Shrub Heath" = "Heath",
-                                "Fen, Marsh, Swamp" = "Marsh",
-                                "Acid Grassland" = "Acid Gr",
-                                "Improved Grassland" = "Improved Gr",
-                                "Neutral Grassland" = "Neutral Gr")) %>%
-  mutate(BH_rec = replace_na(BH_rec, "Other")) %>%
+  select(REP_ID = REP_ID07, AVC = AVC_desc, starts_with("diff")) %>%
   droplevels %>%
   pivot_longer(starts_with("diff"), values_to = "Ell_R") %>%
   filter(!is.na(Ell_R))
 
-ggplot(ELL_diff_long, aes(x = Ell_R)) + 
+ELL_diff_long %>%
+  filter(!is.na(AVC)) %>%
+  ggplot(aes(x = Ell_R)) + 
   geom_histogram() +
   geom_vline(xintercept = 0) +
-  facet_grid(name ~ BH_rec, scales = "free_y")
-ggsave("Ellenberg R change histograms facetted habitat year.png",
+  facet_grid(name ~ AVC, scales = "free_y")
+ggsave("Ellenberg R change histograms all plots facetted AVC year.png",
        path = "Outputs/Graphs/", width = 28, height = 20, units ="cm")
 
 # Convert Ellenberg R scores file to long format
 ELL_R_LONG <- ELL %>%  select(REP_ID = REP_ID07,
                               PLOT_TYPE = PLOT_TYPE.x,
-                              BH_CODE, R07, R98, R78, R16, Rchange) %>%
-  left_join(select(BHPH_NAMES, BH_rec = BROAD_HABITAT, BH_CODE))%>%
-  select(-BH_CODE) %>%
+                              AVC = AVC_desc, R07, R98, R78, R16, Rchange) %>%
   filter(PLOT_TYPE == "X") %>%
   droplevels() %>%
   select(-PLOT_TYPE) %>%
@@ -491,37 +494,19 @@ ELL_R_LONG <- ELL %>%  select(REP_ID = REP_ID07,
   mutate(year = ifelse(year == "07", 2007,
                        ifelse(year == "98", 1998,
                               ifelse(year == "78", 1978, 
-                                     ifelse(year == "16", 2016, NA)))),
-         BH_rec = recode_factor(BH_rec,
-                                "Boundary and Linear Features" = "Other",
-                                "Littoral Sediment" = "Coastal",
-                                "Sea" = "Coastal",
-                                "Supra-littoral Rock" = "Coastal",
-                                "Supra-littoral Sediment" = "Coastal",
-                                "Littoral Rock" = "Coastal",
-                                "Urban" = "Other",
-                                "Standing Open Waters and Canals" = "Other",
-                                "Montane" = "Other",
-                                "Inland Rock" = "Other",
-                                "Calcareous Grassland" = "Other",
-                                "Arable and Horticulture" = "Arable",
-                                "Broadleaved Mixed and Yew Woodland" = "Broadleaf",
-                                "Coniferous Woodland" = "Conifer",
-                                "Dwarf Shrub Heath" = "Heath",
-                                "Fen, Marsh, Swamp" = "Marsh",
-                                "Acid Grassland" = "Acid Gr",
-                                "Improved Grassland" = "Improved Gr",
-                                "Neutral Grassland" = "Neutral Gr")) %>%
-  mutate(BH_rec = replace_na(BH_rec, "Other"))
+                                     ifelse(year == "16", 2016, NA)))))
 str(ELL_R_LONG)  
-summary(ELL_R_LONG$BH_rec)
+summary(ELL_R_LONG$AVC)
 
-ggplot(ELL_R_LONG, aes(x = year, y = value)) +
+# Ellenberg R score change over time boxplot/scatter/line graph
+ELL_R_LONG %>%
+  filter(!is.na(AVC)) %>%
+  ggplot(aes(x = year, y = value)) +
   geom_line(alpha = 0.5, aes(group = REP_ID, colour = Rchange))+
   geom_jitter(size = 0.2, width = 1, height = 0, shape = 16, alpha = 0.5,
               colour = "grey50") +
   geom_boxplot(fill= NA, aes(group = year), outlier.shape = NA, width = 3) +
-  facet_wrap(~BH_rec) + 
+  facet_wrap(~AVC, nrow = 2) + 
   labs(y = "Ellenberg R") +
   # geom_smooth(formula = y ~ poly(x,3)) +
   scale_colour_distiller(palette = "RdBu", direction = 1,
@@ -529,7 +514,7 @@ ggplot(ELL_R_LONG, aes(x = year, y = value)) +
                          name = "Ell R change", na.value = "white") +
   # theme_dark() +
   NULL
-ggsave("Ellenberg R change over time boxplots facetted by habitat.png",
+ggsave("Ellenberg R change over time X plots boxplots facetted by AVC.png",
        path = "Outputs/Graphs/", width = 28, height = 20, units = "cm")
 
 
@@ -537,19 +522,39 @@ ggsave("Ellenberg R change over time boxplots facetted by habitat.png",
 # Combined pH and ellenberg R ####
 # change graphs - combine difference stats
 ph_ell_comb <- ELL_diff_long %>%
-  select(-BH_CODE) %>%
+  select(-AVC) %>%
   filter(grepl("X", REP_ID)) %>%
   full_join(filter(PH_diff_long, name %in% unique(ELL_diff_long$name)))
 str(ph_ell_comb)
-mice::md.pattern(ph_ell_comb)
+md.pattern(ph_ell_comb)
 
-ggplot(ph_ell_comb, aes(x = pH, y = Ell_R)) +
+# scatter plot of pH change against Ellenberg R change facetted by survey year
+# comparison and AVC
+ph_ell_comb %>%
+  filter(!is.na(AVC)) %>%
+  ggplot(aes(x = pH, y = Ell_R)) +
   geom_point() +
-  facet_grid(name~BH_rec) +
+  facet_grid(name~AVC) +
   geom_smooth(method = "lm")
-ggsave("Ellenberg R vs pH change by habitat and survey.png",
+ggsave("Ellenberg R vs pH change by AVC and survey.png",
        path = "Outputs/Graphs/", width = 28, height = 20, units = "cm")
 
+
+# pH in CaCl2 and Ellenberg R 
+phc_ell_comb <- ELL_diff_long %>%
+  filter(grepl("X", REP_ID)) %>%
+  filter(name %in% c("diff0716","diff0719")) %>%
+  full_join(na.omit(select(PHC, REP_ID, pH_change)))
+str(phc_ell_comb)
+md.pattern(phc_ell_comb)
+
+# scatter plot of pH CaCl2 vs Ellenberg R change, no facets
+phc_ell_comb %>%
+  # filter(!is.na(AVC)) %>%
+  ggplot(aes(x = pH_change, y = Ell_R)) +
+  geom_point() +
+  # facet_wrap(~AVC) +
+  geom_smooth(method = "lm")
 
 # combine pH and Ellenberg R scores in wide format
 str(PH)
@@ -570,9 +575,21 @@ ph_ell_wide <- ELL %>%
   filter(REP_ID07 %in% PH$REP_ID) %>%
   select(REP_ID = REP_ID07,  R78, R98, R07, R16) %>%
   full_join(select(PH, REP_ID, PH1978, PH2000, PH2007, PH2016, PH2019),
-            suffix = c("_ellR","_ph"), by = "REP_ID")
+            suffix = c("_ellR","_phw"), by = "REP_ID")
 md.pattern(ph_ell_wide)
 
 psych::pairs.panels(select_if(ph_ell_wide, is.numeric), 
+                    ellipses = FALSE, rug = FALSE,
+                    method = "spearman")
+
+# include CaCl2 but only recent years for graphical simplicity
+phr_ell_wide <- ELL %>%
+  filter(REP_ID07 %in% PH$REP_ID) %>%
+  select(REP_ID = REP_ID07,  R07, R16) %>%
+  full_join(select(PH, REP_ID, PH2007, PH2016),
+            suffix = c("_ellR","_phw"), by = "REP_ID") %>%
+  full_join(select(PHC, REP_ID, PHC2007, PHC2016))
+
+psych::pairs.panels(select_if(phr_ell_wide, is.numeric), 
                     ellipses = FALSE, rug = FALSE,
                     method = "spearman")
