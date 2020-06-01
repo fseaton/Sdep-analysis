@@ -1,6 +1,5 @@
 # Code for reading in data 
 library(data.table)
-library(readxl)
 
 # Laptop
 # Atmospheric data
