@@ -6,6 +6,7 @@ theme_set(theme_classic())
 library(gganimate)
 library(mice)
 library(janitor)
+library(patchwork)
 
 # atmospheric data plots ####
 # Sdep maps
@@ -381,6 +382,22 @@ PHC %>% filter(!is.na(AVC)) %>%
 ggsave("pH CaCl2 change 07 to 1619 facet by AVC.png", path = "Outputs/Graphs/",
        width = 28, height = 12, units = "cm")
 
+p1 <-PHC %>% 
+  ggplot(aes(x = pH_change)) + geom_histogram() +
+  geom_vline(xintercept = 0)+
+  labs(x = "pH change", title = bquote("pH (CaCl"[2]*")")) +
+  scale_x_continuous(limits = c(-3,3))+
+  scale_y_continuous(limits = c(0,110), expand = c(0,0))
+p2 <- PH_diff_long %>% filter(name %in% c("diff0716","diff0719")) %>%
+  ggplot(aes(x = pH)) + geom_histogram() + 
+  geom_vline(xintercept = 0) +
+  labs(x = "", title = "pH (DIW)")+
+  scale_x_continuous(limits = c(-3,3))+
+  scale_y_continuous(limits = c(0,110), expand = c(0,0))
+p2/p1
+ggsave("pH change 07 to 1619 DIW and CaCl2.png", path = "Outputs/Graphs/",
+       width = 15, height = 18, units = "cm")
+
 # data manipulation into long format
 PHC_long <- PHC %>%
   pivot_longer(starts_with("PHC"), names_to = "year",
@@ -403,6 +420,38 @@ ggsave("pH CaCl2 over time boxplots facet by AVC.png",
        path = "Outputs/Graphs/",
        width =28, height = 15, units = "cm")
 
+
+# combine pH in CaCl2 and DIW and plot against each other
+phc_wide_diff <- PH %>%
+  mutate(pH_diw_change = ifelse(!is.na(diff0719),diff0719,
+                                ifelse(!is.na(diff0716), diff0716, NA))) %>%
+  select(REP_ID, PH2007, PH2016, PH2019, pH_diw_change) %>%
+  full_join(PHC)
+
+ggplot(phc_wide_diff, aes(x = pH_diw_change, y = pH_change)) + 
+  geom_abline(intercept = 0,slope = 1, colour = "grey") +
+  geom_vline(xintercept = 0, colour = "grey") +
+  geom_hline(yintercept = 0, colour = "grey") +
+  geom_point() +
+  # geom_smooth(method = "lm") +
+  labs(x = "pH (DIW) change", y = bquote("pH (CaCl"[2]*") change"))
+ggsave("pH change over time DIW vs CaCl2 scatterplot.png", 
+       path = "Outputs/Graphs/",
+       width = 15, height = 15, units = "cm")
+
+# there is one sample with a NA for AVC so removing
+phc_wide_diff %>% filter(!is.na(AVC)) %>%
+  ggplot(aes(x = pH_diw_change, y = pH_change)) + 
+  geom_abline(intercept = 0,slope = 1, colour = "grey") +
+  geom_vline(xintercept = 0, colour = "grey") +
+  geom_hline(yintercept = 0, colour = "grey") +
+  facet_wrap(~AVC, nrow = 2) +
+  geom_point() +
+  # geom_smooth(method = "lm") +
+  labs(x = "pH (DIW) change", y = bquote("pH (CaCl"[2]*") change"))
+ggsave("pH change over time DIW vs CaCl2 scatterplots facet by AVC.png", 
+       path = "Outputs/Graphs/",
+       width = 28, height = 15, units = "cm")
 
 # Plant Ellenberg scores ####
 # Data manipulation
