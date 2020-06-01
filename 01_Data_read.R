@@ -26,3 +26,4 @@ GM16_IBD <- fread("../../../CS/Data/GMEP_VEG_IBD_XNEST1.csv")
 
 # metadata
 BHPH_NAMES <- read.csv("../../../CS/Data/BHPH_names.csv")
+CS07_PLOTS <- read.csv("../../../CS/Data/VEGETATION_PLOTS_2007.csv")

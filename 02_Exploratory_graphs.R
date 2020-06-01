@@ -246,7 +246,13 @@ PH <- PH %>%
          diff9816 = PH2016 - PH2000,
          diff9819 = PH2019 - PH2000,
          diff0716 = PH2016 - PH2007,
-         diff0719 = PH2019 - PH2007)
+         diff0719 = PH2019 - PH2007) %>%
+  mutate(diff0718 = ifelse(!is.na(diff0719), diff0719,
+                           ifelse(!is.na(diff0716), diff0716, NA)),
+         diff7818 = ifelse(!is.na(diff7819), diff7819,
+                           ifelse(!is.na(diff7816), diff7816, NA)),
+         diff9818 = ifelse(!is.na(diff9819), diff9819,
+                           ifelse(!is.na(diff9816), diff9816, NA)))
 summary(PH)
 
 PH_diff_long <- PH %>%
@@ -261,8 +267,86 @@ ggplot(PH_diff_long, aes(x = pH)) +
   facet_wrap(~name, scales = "free_y") +
   geom_vline(xintercept = 0)
 
+# select only most recent change and convert into wide format for plotting
+PH_Diff_wide <- select(PH, REP_ID, diff0718) %>%
+  na.omit() %>%
+  left_join(select(CS07_PLOTS, REP_ID, POINT_X, POINT_Y))
+summary(PH_Diff_wide)
 
-# breakdown by AVC data
+ggplot(PH_Diff_wide, aes(x = POINT_X, y = POINT_Y, colour = diff0718)) +
+  geom_jitter(width = 5000, height = 5000) +
+  coord_fixed() +
+  scale_colour_distiller(palette = "RdBu", direction = 1,
+                         limits = c(-1,1)*max(abs(PH_Diff_wide$diff0718)),
+                         name = "pH change", na.value = "white") +
+  theme_dark()
+
+# ** pH maps ####
+library(sf)
+library(leaflet)
+
+# convert to sf object
+CS_PH_loc <- PH_Diff_wide %>%
+  select(POINT_X, POINT_Y) %>%
+  as.matrix() %>%
+  st_multipoint(dim="XY") %>%
+  st_sfc(crs = 27700) %>% 
+  st_transform(crs = 4326) %>%
+  st_cast("POINT") 
+
+CS_PH_loc <- st_sf(cbind(select(PH_Diff_wide, REP_ID, pH_change = diff0718),CS_PH_loc))
+
+
+# Create variable for colouring of points. first cut the continuous variable
+# into bins - these bins are now factors
+CS_PH_loc$pH_lev <- cut(CS_PH_loc$pH_change, 
+                        c(-3,-1.5,-1,-0.5,0,0.5,1,1.5,3))
+
+pHCol <- colorFactor(palette = 'RdBu', CS_PH_loc$pH_lev)
+
+# add random jitter to points so not overplotting 
+CS_PH_loc_jitter <- st_jitter(CS_PH_loc, factor = 0.005)
+
+# read in UK boundary shapefile
+UK_boundary <- st_read("../../../GBR_adm/GBR_adm0.shp")
+
+# plot interactively
+leaflet() %>%
+  addPolygons(data = UK_boundary, stroke = FALSE, 
+              color = "black") %>%
+  addCircleMarkers(data = CS_PH_loc_jitter, radius = 5,
+                   label = CS_PH_loc$REP_ID, 
+                   color = ~pHCol(CS_PH_loc$pH_lev),
+                   fillOpacity = 1, stroke = FALSE) %>%
+  addLegend('topright', pal = pHCol, values = CS_PH_loc$pH_lev,
+            title = 'pH change',
+            opacity = 1)
+
+# plot histograms of difference between survey years wrapping together 16 and 19
+PH_diff_long %>% filter(name %in%
+                          c("diff7807","diff9807","diff7898",
+                            "diff7818","diff9818","diff0718")) %>%
+  ggplot(aes(x = pH)) + 
+  geom_histogram() +
+  facet_wrap(~name) +
+  geom_vline(xintercept = 0)
+ggsave("pH change histograms facet by survey comparison.png",
+       path = "Outputs/Graphs/",
+       width = 20, height = 12, units = "cm")
+
+# remove 18 variables for consistency later in script
+PH_diff_long <- filter(PH_diff_long,
+                       names %in% c("diff7898",
+                                    "diff7807",
+                                    "diff7816",
+                                    "diff7819",
+                                    "diff9807",
+                                    "diff9816",
+                                    "diff9819",
+                                    "diff0716",
+                                    "diff0719"))
+
+# ** breakdown by AVC data ####
 # AVC data manipulation
 hab07 <- select(CS07_IBD, REP_ID = REP_ID07, AVC07) %>%
   unique()
@@ -355,7 +439,7 @@ PH_diff_long %>%
 ggsave("pH difference histograms facetted by AVC and year.png",
        path = "Outputs/Graphs/", width = 28, height = 24, units = "cm")
 
-# Soil pH in CaCl2 ####
+# ** Soil pH in CaCl2 ####
 # Only have pH in CaCl2 data for 2007 onwards
 str(CS78_PH)
 str(CS98_PH)
