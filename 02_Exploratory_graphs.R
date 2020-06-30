@@ -432,6 +432,7 @@ get_dupes(PH_diff_long, REP_ID, name)
 
 PH_diff_long %>%
   filter(!is.na(AVC)) %>% 
+  filter(name %in% c("diff7807","diff7898","diff9807","diff7818","diff9818","diff0718")) %>%
   ggplot(aes(x = pH)) + 
   geom_histogram() +
   geom_vline(xintercept = 0) +
@@ -726,3 +727,64 @@ phr_ell_wide <- ELL %>%
 psych::pairs.panels(select_if(phr_ell_wide, is.numeric), 
                     ellipses = FALSE, rug = FALSE,
                     method = "spearman")
+
+
+# Soil moisture ####
+UK19_WET <- UK19_WET %>%
+  mutate(REP_ID = paste0(`Square number...1`,`X plot...2`)) %>%
+  select(-starts_with("Square")) %>%
+  select(-starts_with("X "))
+
+MOISTURE <- CS_tier4 %>%
+  mutate(REP_ID = ifelse(!is.na(REP_ID07), REP_ID07,
+                         ifelse(!is.na(REP_ID98), REP_ID98,
+                                ifelse(!is.na(REP_ID78), REP_ID78, NA)))) %>%
+  select(REP_ID, MOISTURE_CONTENT_07, MOISTURE_CONTENT_98) %>%
+  full_join(select(UK19_WET, REP_ID, MOISTURE_CONTENT_19 = `g water/wet weight of soil`)) %>%
+  # mutate(VWC_19 = 100*VWC_19) %>%
+  pivot_longer(starts_with("MOISTURE"), names_to = "variable", 
+               values_to = "Moisture") %>%
+  mutate(Year = ifelse(variable == "MOISTURE_CONTENT_07", 2007,
+                       ifelse(variable == "MOISTURE_CONTENT_98", 1998,
+                              ifelse(variable == "MOISTURE_CONTENT_19", 2019, NA))))
+
+ggplot(MOISTURE, aes(x = Moisture)) + 
+  geom_histogram() +
+  facet_wrap(~Year, nrow = 3, scales = "free_y") +
+  labs(x = "Soil moisture (%)") +
+  scale_x_continuous(limits = c(0,100)) +
+  scale_y_continuous(expand = expansion(mult = c(0,0.1)))
+ggsave("Soil moisture g per wet soil histograms.png", path = "Outputs/Graphs/",
+       width = 12, height = 15, units = "cm")
+
+MOISTURE_PH <- PH_long %>%
+  mutate(year = ifelse(year == 2000, 1998, year)) %>%
+  full_join(rename(MOISTURE, year = Year)) %>%
+  filter(year %in% c(1998, 2007, 2019))
+ggplot(MOISTURE_PH, aes(x = Moisture, y = pH,
+                        colour = as.factor(year), fill = as.factor(year))) +
+  geom_point(alpha = 0.5, size = 0.8) +
+  geom_smooth(formula = 'y ~ log(x) + log(x)', method = "lm") +
+  scale_colour_brewer(palette = "Dark2", name = "Year") +
+  scale_fill_brewer(palette = "Dark2", name = "Year") +
+  labs(x = "Soil moisture (g/g wet soil)") +
+  scale_y_continuous(limits = c(3.3,9.2))
+ggsave("Soil moisture vs pH log line.png", path = "Outputs/Graphs",
+       width =14, height = 12, units = "cm")  
+
+
+ggplot(MOISTURE_PH, aes(x = Moisture, y = pH)) +
+  geom_point(alpha = 0.5, size = 0.8, colour = "dodgerblue2") +
+    geom_smooth(colour = "black", formula = 'y ~ log(x)', method = "lm") +
+  facet_wrap(~year) +
+  labs(x = "Soil moisture (g/g wet soil)") +
+  scale_y_continuous(limits = c(3.3,9.2))
+ggsave("Soil moisture vs pH facet log line.png", path = "Outputs/Graphs",
+       width =18, height = 12, units = "cm")  
+
+
+library(brms)
+MOISTURE_PH$Year_cat <- as.factor(MOISTURE_PH$year)
+get_prior(bf(pH ~ a*exp(b*Moisture) + c*exp(d*Moisture) + e, 
+             a + b + c + d + e ~1, nl = TRUE),
+          data = MOISTURE_PH)

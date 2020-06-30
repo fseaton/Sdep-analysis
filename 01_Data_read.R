@@ -1,5 +1,6 @@
 # Code for reading in data 
 library(data.table)
+library(readxl)
 
 # Laptop
 # Atmospheric data
@@ -17,6 +18,10 @@ CS98_PH <- fread("../../../CS/Data/CS1998_PH_LOI_DATA.csv")
 CS07_PH <- fread("../../../CS/Data/CS2007_PH_LOI_DATA.csv")
 CS16_PH <- fread("../../../CS/Data/CS2016_PH_LOI_DATA.csv")
 UK19_PH <- fread("../../UK19_PHLOI.csv")
+
+CS_tier4 <- fread("../../../CS/Data/CS_SOILS_TIER_4_DATA.csv")
+UK19_WET <- read_excel("../../Copy of UKSCAPE Field Survey 2019 CHEMICAL DARv3.xls",
+                       sheet = "DATA", skip = 3, na = "NA")
 
 # veg data
 CS78_IBD <- fread("../../../CS/Data/IBD78.csv")
