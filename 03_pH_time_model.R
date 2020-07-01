@@ -464,6 +464,8 @@ plot(brm_LOI)
 pp_check(brm_LOI)
 
 
+
+
 # AVC
 LOI <- LOI %>%
   mutate(AggHab = recode_factor(as.factor(AVC),
@@ -481,12 +483,30 @@ get_prior(LOI_pr ~ AggHab + YR - 1 + (1|SERIES_NUM) +
             ar(time = YRnm, gr = REP_ID, cov = TRUE), 
           data = LOI, family = "beta")
 
-mod_pr <- c(prior(normal(0.3,0.1), class = "b"),
+mod_pr <- c(prior(normal(0,0.3), class = "b"),
             prior(normal(0.2,0.1), class = "ar"),
-            prior(gamma(0.1,0.1), class = "phi"),
+            prior(gamma(0.01,0.01), class = "phi"),
             prior(student_t(3, 0, 1), class = "sd"))
 brm_LOI2 <- brm(LOI_pr ~ AggHab + YR -1 + (1|SERIES_NUM) + 
                  ar(time = YRnm, gr = REP_ID, cov = TRUE), 
                data = LOI, family = "beta",
                prior = mod_pr, cores = 2, chains = 2, iter = 2000,
                sample_prior = "only")
+
+
+# with data
+mod_pr <- c(prior(normal(0,0.3), class = "b"),
+            prior(normal(0.2,0.2), class = "ar"),
+            prior(gamma(0.01,0.01), class = "phi"),
+            prior(student_t(3, 0, 1), class = "sd"),
+            prior(student_t(3, 0, 2), class = "sderr"))
+brm_LOI <- brm(LOI_pr ~ YR -1 + (1|SERIES_NUM) + 
+                 ar(time = YRnm, gr = REP_ID, cov = TRUE), 
+               data = LOI, family = "beta",
+               prior = mod_pr, chains = 2, cores = 2)
+
+brm_LOI2 <- brm(LOI_pr ~ AggHab + YR -1 + (1|SERIES_NUM) + 
+                  ar(time = YRnm, gr = REP_ID, cov = TRUE), 
+                data = LOI, family = "beta",
+                prior = mod_pr, cores = 2)
+
