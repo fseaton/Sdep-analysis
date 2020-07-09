@@ -4,20 +4,26 @@ library(dplyr)
 library(car)
 
 # data manipulation
-str(PH_long_hab)
+CS78_PH$REP_ID <- paste(CS78_PH$SQUARE_NUM,CS78_PH$REP_NUM, sep = "X")
+CS98_PH$REP_ID <- paste(CS98_PH$SQUARE_NUM,CS98_PH$REP_NUM, sep = "X")
+CS07_PH$REP_ID <- paste(CS07_PH$SQUARE_NUM,CS07_PH$REP_NUM, sep = "X")
+UK19_PH$REP_ID <- paste(UK19_PH$SQUARE_NUM,UK19_PH$REP_NUM, sep = "X")
 
-PH_mod <- select(PH_long_hab, REP_ID, AVC, year, pH)
+PH_mod <- full_join(select(CS78_PH, REP_ID, PH1978),
+                 select(CS98_PH, REP_ID, PH1998 = PHF2000)) %>%
+  full_join(select(CS07_PH, REP_ID, PH2007 = PH2007_IN_WATER)) %>%
+  full_join(select(UK19_PH, REP_ID, PH2019 = PH_DIW)) %>%
+  pivot_longer(starts_with("PH"), values_to = "pH",
+               values_drop_na = TRUE, names_prefix = "PH") %>%
+  mutate(year = as.numeric(name),
+         YR = as.factor(name),
+         YRnm = as.integer(YR),
+         SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "X"), "[",1)),
+         REP_PLOT = sapply(strsplit(REP_ID, "X"), "[",2)) %>%
+  left_join(select(landclass_dat, SERIES_NUM, LC07))
+str(PH_mod)
+summary(PH_mod)
 
-PH_mod$SERIES_NUM <- sapply(strsplit(PH_mod$REP_ID, "X"),"[", 1)
-PH_mod$REP_PLOT <- sapply(strsplit(PH_mod$REP_ID, "X"),"[", 2)
-
-PH_mod <- filter(PH_mod, year != 2016)
-PH_mod <- mutate(PH_mod, year = ifelse(year == 2000, 1998, year))
-
-#convert the year data to a factor to use in the model, keeping the original
-PH_mod$YR <- as.factor(PH_mod$year)
-#create an integer sequence to use for the autocorrelation component - this allows use of an AR(1) between survey years.
-PH_mod$YRnm <- as.integer(PH_mod$YR)
 
 #run the model to obtain estimates
 modNat <- lme(pH ~ YR - 1, random = ~1|SERIES_NUM,
@@ -35,42 +41,42 @@ plot(modNat, resid(., type = "p") ~ fitted(.)|YR, abline = 0,
 
 
 # checking to see if adding AVC info improves normality of residuals
-PH_mod <- PH_mod %>%
-  mutate(AggHab = recode_factor(as.factor(AVC),
-                                 "Crops/Weeds" = "Fertile",
-                                 "Fertile grassland" = "Fertile",
-                                 "Tall herb/grass" = "Fertile",
-                                 "Infertile grassland" = "Infertile",
-                                 "Lowland wooded"  = "Infertile",
-                                 "Heath/bog" = "Acidic",
-                                 "Moorland grass/mosaic" = "Acidic",
-                                 "Upland wooded" = "Acidic"))
-
-modHab1 <- lme(pH ~ AggHab + YR - 1, random = ~1|SERIES_NUM,
-              data= PH_mod,
-              correlation = corAR1(form = ~YRnm|SERIES_NUM/REP_PLOT),
-              na.action = na.omit)
-summary(modHab1)
-
-# check residuals 
-qqp(resid(modHab1))
-plot(modHab1)
-
-modHab2 <- lme(pH ~ AggHab*YR - 1, random = ~1|SERIES_NUM,
-               data= PH_mod,
-               correlation = corAR1(form = ~YRnm|SERIES_NUM/REP_PLOT),
-               na.action = na.omit)
-summary(modHab2)
-
-# check residuals 
-qqp(resid(modHab2))
-plot(modHab2)
-
-par(mfrow=c(1,3))
-qqp(resid(modNat), main = "Year only")
-qqp(resid(modHab1), main = "AggHab + Year")
-qqp(resid(modHab2), main = "AggHab*Year")
-par(mfrow=c(1,1))
+# PH_mod <- PH_mod %>%
+#   mutate(AggHab = recode_factor(as.factor(AVC),
+#                                  "Crops/Weeds" = "Fertile",
+#                                  "Fertile grassland" = "Fertile",
+#                                  "Tall herb/grass" = "Fertile",
+#                                  "Infertile grassland" = "Infertile",
+#                                  "Lowland wooded"  = "Infertile",
+#                                  "Heath/bog" = "Acidic",
+#                                  "Moorland grass/mosaic" = "Acidic",
+#                                  "Upland wooded" = "Acidic"))
+# 
+# modHab1 <- lme(pH ~ AggHab + YR - 1, random = ~1|SERIES_NUM,
+#               data= PH_mod,
+#               correlation = corAR1(form = ~YRnm|SERIES_NUM/REP_PLOT),
+#               na.action = na.omit)
+# summary(modHab1)
+# 
+# # check residuals 
+# qqp(resid(modHab1))
+# plot(modHab1)
+# 
+# modHab2 <- lme(pH ~ AggHab*YR - 1, random = ~1|SERIES_NUM,
+#                data= PH_mod,
+#                correlation = corAR1(form = ~YRnm|SERIES_NUM/REP_PLOT),
+#                na.action = na.omit)
+# summary(modHab2)
+# 
+# # check residuals 
+# qqp(resid(modHab2))
+# plot(modHab2)
+# 
+# par(mfrow=c(1,3))
+# qqp(resid(modNat), main = "Year only")
+# qqp(resid(modHab1), main = "AggHab + Year")
+# qqp(resid(modHab2), main = "AggHab*Year")
+# par(mfrow=c(1,1))
 
 # no improvement when incorporating habitat info
 
@@ -94,13 +100,13 @@ plot(modnat.emm.s, comparisons = TRUE)
 
 #to set up the bootstrapping, we create a list whereby each entry contains the
 #row IDs for corresponding entried for the specific year*landclass combination
-N_tab <- table(PH_mod$AVC, PH_mod$YR)
+N_tab <- table(PH_mod$LC07, PH_mod$YR)
 count=1
 idx=list()
 for(j in 1:(dim(N_tab)[1])){
   for(i in 1:(dim(N_tab)[2])){
     idx[[count]] = which(PH_mod$YR == colnames(N_tab)[i] & 
-                           PH_mod$AVC == rownames(N_tab)[j])
+                           PH_mod$LC07 == rownames(N_tab)[j])
     count=count+1
   }
 }
@@ -152,14 +158,14 @@ ggplot(All_Ests, aes(x = Year)) +
   geom_linerange(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod)) +
   geom_linerange(aes(ymin = Lower_Boot, ymax = Upper_Boot), size = 2) +
   labs(y = "pH")
-ggsave("pH by year model outputs.png", path = "Outputs/Graphs/",
+ggsave("pH by year model outputs bootstrap LC.png", path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 ggplot(All_Ests, aes(x = Year)) +
-  geom_jitter(data = PH_long, aes(x = year, y = pH), colour = "grey", alpha = 0.05, width = 1, height = 0) +
-  # geom_dotplot(data = PH_long, aes(x = year, y = pH, group = year), binaxis = "y", stackdir = "center",
+  geom_jitter(data = PH_mod, aes(x = year, y = pH), colour = "grey", alpha = 0.05, width = 1, height = 0) +
+  # geom_dotplot(data = PH_mod, aes(x = year, y = pH, group = year), binaxis = "y", stackdir = "center",
   #              fill = "#2F7ECE", alpha = 0.05, width = 1, binwidth = 0.02) +
-  geom_boxplot(data = PH_long, aes(x = year, y = pH, group = year), colour = "grey20", alpha = 0.2, width = 1) +
+  geom_boxplot(data = PH_mod, aes(x = year, y = pH, group = year), colour = "grey20", alpha = 0.2, width = 1) +
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
   geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
   geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
@@ -167,7 +173,7 @@ ggplot(All_Ests, aes(x = Year)) +
   # geom_linerange(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod)) +
   # geom_linerange(aes(ymin = Lower_Boot, ymax = Upper_Boot), size = 2) 
   labs(y = "pH")
-ggsave("pH by year model and data.png", path = "Outputs/Graphs/",
+ggsave("pH by year model bootstrap LC and data.png", path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 
@@ -233,16 +239,17 @@ plot(resLOI_noar)
 
 #to set up the bootstrapping, we create a list whereby each entry contains the
 #row IDs for corresponding entried for the specific year*landclass combination
-LOI <- left_join(LOI, unique(select(PH_mod, REP_ID, AVC)))
+LOI <- LOI %>% mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "X"), "[", 1))) %>%
+  left_join(select(landclass_dat, SERIES_NUM, LC07))
 summary(LOI)
 
-N_tab <- table(LOI$AVC, LOI$YR)
+N_tab <- table(LOI$LC07, LOI$YR)
 count=1
 idx=list()
 for(j in 1:(dim(N_tab)[1])){
   for(i in 1:(dim(N_tab)[2])){
     idx[[count]] = which(LOI$YR == colnames(N_tab)[i] & 
-                           LOI$AVC == rownames(N_tab)[j])
+                           LOI$LC07 == rownames(N_tab)[j])
     count=count+1
   }
 }
@@ -300,7 +307,7 @@ ggplot(All_Ests, aes(x = Year)) +
   geom_linerange(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod)) +
   geom_linerange(aes(ymin = Lower_Boot, ymax = Upper_Boot), size = 2) +
   labs(y = "LOI (%)")
-ggsave("LOI by year model outputs.png", path = "Outputs/Graphs/",
+ggsave("LOI by year model outputs bootstrap LC.png", path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 ggplot(All_Ests, aes(x = Year)) +
@@ -311,7 +318,7 @@ ggplot(All_Ests, aes(x = Year)) +
   geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
   geom_point(aes(y = Estimated_Value), colour = "#2F7ECE") +
   labs(y = "LOI (%)")
-ggsave("LOI by year model and data.png", path = "Outputs/Graphs/",
+ggsave("LOI by year model bootstrap LC and data.png", path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 
@@ -336,13 +343,13 @@ plot(modloi.log.emm.s, comparisons = TRUE)
 #to set up the bootstrapping, we create a list whereby each entry contains the
 #row IDs for corresponding entried for the specific year*landclass combination
 
-N_tab <- table(LOI$AVC, LOI$YR)
+N_tab <- table(LOI$LC07, LOI$YR)
 count=1
 idx=list()
 for(j in 1:(dim(N_tab)[1])){
   for(i in 1:(dim(N_tab)[2])){
     idx[[count]] = which(LOI$YR == colnames(N_tab)[i] & 
-                           LOI$AVC == rownames(N_tab)[j])
+                           LOI$LC07 == rownames(N_tab)[j])
     count=count+1
   }
 }
@@ -352,7 +359,7 @@ for(j in 1:(dim(N_tab)[1])){
 boot_ESTS=matrix(nrow=1000,ncol=4)
 
 #we run 1000 bootstrap resamples
-for(isim in 1:100){
+for(isim in 1:1000){
   
   #at each iteration we resample from the index created above - hence resampling
   #year*landclass combinations. then store the IDs
@@ -368,7 +375,6 @@ for(isim in 1:100){
   #doesn't matter as we are only extracting the mean values.
   boot_mod = try(lme(log(LOI) ~ YR - 1, random = ~1|SERIES_NUM,
                      data = boot_dat, na.action = na.omit))
-  qqp(resid(boot_mod))
   
   #store the yearly estimates. 
   if(class(boot_mod)!="try-error"){
@@ -377,14 +383,14 @@ for(isim in 1:100){
   
 } 
 
-out_dat_pred <- data.frame(Year=as.numeric(as.character(sort(unique(LOI$YR)))),Estimated_Value =summary(modLOI)$tTable[,1],
+out_dat_pred_log <- data.frame(Year=as.numeric(as.character(sort(unique(LOI$YR)))),Estimated_Value =summary(modLOI)$tTable[,1],
                            Lower_est.Mod = summary(modLOI)$tTable[,1]-(1.96*summary(modLOI)$tTable[,2]),
                            Upper_est.Mod = summary(modLOI)$tTable[,1]+(1.96*summary(modLOI)$tTable[,2])
 )
-out_dat_pred
+out_dat_pred_log
 
 #Obtain confidence intervals from bootstrap by taking percentiles  
-All_Ests_log <- cbind(out_dat_pred,
+All_Ests_log <- cbind(out_dat_pred_log,
                   t(apply(boot_ESTS, 2, quantile, 
                           c(0.025,0.975), na.rm=TRUE)))
 
@@ -403,8 +409,8 @@ ggplot(All_Ests_log_tr, aes(x = Year)) +
   geom_linerange(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod)) +
   geom_linerange(aes(ymin = Lower_Boot, ymax = Upper_Boot), size = 2) +
   labs(y = "LOI (%)")
-# ggsave("LOI by year log model outputs.png", path = "Outputs/Graphs/",
-#        width = 12, height = 10, units = "cm")
+ggsave("LOI by year log model outputs bootstrap LC.png", path = "Outputs/Graphs/",
+       width = 12, height = 10, units = "cm")
 
 LOI_mean <- LOI %>%
   group_by(year) %>%
@@ -416,8 +422,8 @@ LOI_mean <- LOI %>%
 ggplot(All_Ests_log_tr, aes(x = Year)) +
   geom_jitter(data = LOI, aes(x = year, y = LOI), colour = "grey", alpha = 0.05, width = 1, height = 0) +
   geom_boxplot(data = LOI, aes(x = year, y = LOI, group = year), colour = "grey20", alpha = 0.2, width = 1) +
-  geom_pointrange(data = LOI_mean, aes(x = year, y = mean_LOI,
-                                  ymax = upper_mean, ymin = lower_mean), size = 0.1) +
+  # geom_pointrange(data = LOI_mean, aes(x = year, y = mean_LOI,
+  #                                 ymax = upper_mean, ymin = lower_mean), size = 0.1) +
   
   # log
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
@@ -432,7 +438,7 @@ ggplot(All_Ests_log_tr, aes(x = Year)) +
   geom_point(data = All_Ests, aes(y = Estimated_Value), colour = "#4DA43A") +
   
   labs(y = "LOI (%)")
-ggsave("LOI by year log blue nolog green model and data.png", path = "Outputs/Graphs/",
+ggsave("LOI by year log blue nolog green model bootstrap LC and data.png", path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 # Bayesian version ####
