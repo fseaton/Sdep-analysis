@@ -32,3 +32,36 @@ GM16_IBD <- fread("../../../CS/Data/GMEP_VEG_IBD_XNEST1.csv")
 # metadata
 BHPH_NAMES <- read.csv("../../../CS/Data/BHPH_names.csv")
 CS07_PLOTS <- read.csv("../../../CS/Data/VEGETATION_PLOTS_2007.csv")
+
+
+# Desktop
+library(RODBC)
+## get data on species characteristics from CS database
+pwds <- read.csv("Outputs/pwd.csv")
+channel3 <- odbcConnect("FEGEN", uid="csgeo", pwd=pwds[pwds$uid=="csgeo","pwd"], believeNRows=FALSE)
+sqlTables(channel3, schema="CSVEG")
+
+# derived IBD files
+CS78_IBD <- sqlFetch(channel3, "CSVEG.IBD78")
+CS98_IBD <- sqlFetch(channel3, "CSVEG.IBD98")
+CS07_IBD <- sqlFetch(channel3, "CSVEG.IBD07")
+
+# soils data
+channel2 <- odbcConnect("MWA", uid="masq", pwd=pwds[pwds$uid=="masq","pwd"], believeNRows=FALSE)
+sqlTables(channel2, schema="DB_MASQ")
+
+# pH data
+CS16_PH <- sqlFetch(channel2, "DB_MASQ.CS2016_PH_LOI_DATA")
+CS07_PH <- sqlFetch(channel2, "DB_MASQ.CS2007_PH_LOI_DATA")
+CS78_PH <- sqlFetch(channel2, "DB_MASQ.CS1978_PH_LOI_DATA")
+CS98_PH <- sqlFetch(channel2, "DB_MASQ.CS1998_PH_LOI_DATA")
+UK19_PH <- read.csv("Outputs/UK19_PHLOI.csv")
+
+# tier 4 data
+CS_tier4 <- sqlFetch(channel2, "DB_MASQ.CS_SOILS_TIER_4_DATA")
+
+# landclass data
+channel <- odbcConnect("MWA", uid = "lus_user", pwd = pwds[pwds$uid=="lus_user","pwd"], 
+                       case = "nochange", believeNRows = FALSE)
+sqlTables(channel, schema = "DB_CSSQUARES")
+landclass_dat <- sqlFetch(channel, "DB_CSSQUARES.SQUARES_FILE_ALL_LC")
