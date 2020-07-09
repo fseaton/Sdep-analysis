@@ -716,6 +716,75 @@ psych::pairs.panels(select_if(ph_ell_wide, is.numeric),
                     ellipses = FALSE, rug = FALSE,
                     method = "spearman")
 
+# strongest correlation tends to be current year
+ph_ell_long <- ph_ell_wide %>%
+  pivot_longer(ends_with(c("78","98","00","07","16","19")),
+               values_drop_na = TRUE) %>%
+  mutate(year = sapply(strsplit(name, "[A-Z]{1,2}"),"[",2),
+         variable = sapply(strsplit(name, "[0-9]{1,4}"),"[",1)) %>%
+  mutate(year = as.numeric(recode(year, "98" = "1998",
+                                  "78" = "1978",
+                                  "07" = "2007",
+                                  "16" = "2018",
+                                  "19" = "2018",
+                                  "2000" = "1998",
+                                  "2016" = "2018",
+                                  "2019" = "2018")),
+         variable = recode(variable, 
+                           "PH" = "Soil_pH",
+                           "R" = "Ell_R")) %>%
+  select(-name) %>%
+  unique() %>%
+  pivot_wider(names_from = variable,
+              values_from = value)
+
+ggplot(ph_ell_long, aes(x = Soil_pH, y = Ell_R)) + 
+  geom_point(size = 1) +
+  facet_wrap(~year) +
+  labs(x = "Soil pH", y = "Ellenberg R")
+ggsave("Ellenberg R vs Soil pH by year.png", path = "Outputs/Graphs",
+       width = 15, height = 15, units = "cm")
+
+# checking if sigmoidal curve seems appropriate
+x <- seq(3.5,9,0.1)
+c1 <- 4.5
+c2 <- 1.5
+c3 <- 5
+c4 <- 2
+y <- c1/(1 + exp(-c2*(x - c3))) + c4
+c1 <- 4.5
+c2 <- 2
+c3 <- 4.5
+c4 <- 2
+y2 <- c1/(1 + exp(-c2*(x - c3))) + c4
+dat <- data.frame(x,y,y2)
+
+# asymmetrical sigmoidal curve
+c1 <- 4
+c2 <- 1.5
+c3 <- 3.5
+c4 <- 2.5
+c5 <- 6
+y3 <- c1/((1 + exp(-c2*(x - c3)))^c5) + c4
+dat <- data.frame(x,y,y2,y3)
+
+
+ggplot(ph_ell_long, aes(x = Soil_pH, y = Ell_R)) +
+  geom_point(size = 1) +
+  facet_wrap(~year) + 
+  geom_smooth() +
+  geom_line(data = dat, aes(x = x, y = y), 
+            colour = "purple", size = 1.5) +
+  geom_line(data = dat, aes(x = x, y = y2), 
+            colour = "red", size = 1.5) +
+  geom_line(data = dat, aes(x = x, y = y3), 
+            colour = "orange", size = 1.5) +
+  labs(x = "Soil pH", y = "Ellenberg R")
+
+# seems reasonable - interestingly in 1978 the Ellenberg R value for any given
+# pH is higher. So in model need to make sure that c3 varies by year, and not
+# sure about the other parameters.
+
 # include CaCl2 but only recent years for graphical simplicity
 phr_ell_wide <- ELL %>%
   filter(REP_ID07 %in% PH$REP_ID) %>%
