@@ -46,6 +46,14 @@ CS78_IBD <- sqlFetch(channel3, "CSVEG.IBD78")
 CS98_IBD <- sqlFetch(channel3, "CSVEG.IBD98")
 CS07_IBD <- sqlFetch(channel3, "CSVEG.IBD07")
 
+# metadata
+SPECIES_LIB_TRAITS <- sqlFetch(channel3, "CSVEG.LUS_SP_LIB_AND_TRAITS")
+SPECIES_LIB_CODES <- sqlFetch(channel3, "CSVEG.LUS_SP_LIB_CODES_NEW")
+
+# recent plant data
+VEGETATION_PLOT_SP_161819 <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOT_SP_161819")
+
+
 # soils data
 channel2 <- odbcConnect("MWA", uid="masq", pwd=pwds[pwds$uid=="masq","pwd"], believeNRows=FALSE)
 sqlTables(channel2, schema="DB_MASQ")
