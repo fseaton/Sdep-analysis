@@ -199,6 +199,67 @@ AtDep_moo %>%
   transition_time(year) +
   ease_aes('linear')
 
+# Cumulative deposition per square ####
+AtDepavg_cumdep_sq <- AtDep_avg %>%
+  mutate(year_cat = ifelse(year %in% 1970:1978, "70_78",
+                           ifelse(year %in% 1979:1998, "79_98",
+                                  ifelse(year %in% 1999:2007, "99_07",
+                                         ifelse(year %in% 2008:2018, "08_18",NA))))) %>%
+  group_by(x,y,square, year_cat) %>%
+  summarise(Sdep = sum(Sdep),
+            Ndep = sum(Ndep)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = year_cat, 
+              values_from = c(Sdep, Ndep)) 
+
+psych::pairs.panels(select(AtDepavg_cumdep_sq,-x,-y,-square))
+
+# merge with CS plots
+dep_x <- AtDepavg_cumdep_sq$x
+dep_y <- AtDepavg_cumdep_sq$y
+
+CS_m <- CS07_PLOTS %>% select(plot_x = POINT_X, 
+                              plot_y = POINT_Y, REP_ID)
+for(i in 1:nrow(CS_m)) {
+  CS_m[i,"x"] <- dep_x[which.min(abs(dep_x - CS_m$plot_x[i]))]
+  CS_m[i,"y"] <- dep_y[which.min(abs(dep_y - CS_m$plot_y[i]))]
+}
+
+CS_Atdep <- left_join(CS_m, AtDepavg_cumdep_sq)
+summary(CS_Atdep)
+psych::multi.hist(select_if(CS_Atdep, is.numeric))
+
+AtDepfor_cumdep_sq <- AtDep_for %>%
+  mutate(year_cat = ifelse(year %in% 1970:1978, "70_78",
+                           ifelse(year %in% 1979:1998, "79_98",
+                                  ifelse(year %in% 1999:2007, "99_07",
+                                         ifelse(year %in% 2008:2018, "08_18",NA))))) %>%
+  group_by(x,y,square, year_cat) %>%
+  summarise(Sdep = sum(Sdep),
+            Ndep = sum(Ndep)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = year_cat, 
+              values_from = c(Sdep, Ndep)) 
+
+# difference since 1970
+AtDepavg_diff_sq <- AtDep_avg %>%
+  mutate(year_cat = ifelse(year %in% 1970:1978, "70_78",
+                           ifelse(year %in% 1979:1998, "79_98",
+                                  ifelse(year %in% 1999:2007, "99_07",
+                                         ifelse(year %in% 2008:2018, "08_18",NA))))) %>%
+  group_by(x,y,square, year_cat) %>%
+  summarise(Sdep = sum(Sdep),
+            Ndep = sum(Ndep)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = year_cat, 
+              values_from = c(Sdep, Ndep)) 
+
+psych::pairs.panels(select(AtDepavg_cumdep_sq,-x,-y,-square))
+
+# merge with CS plots
+dep_x <- AtDepavg_cumdep_sq$x
+dep_y <- AtDepavg_cumdep_sq$y
+  
 # Soil pH data ####
 # data manipulation
 str(CS78_PH)
@@ -784,6 +845,42 @@ ggplot(ph_ell_long, aes(x = Soil_pH, y = Ell_R)) +
 # seems reasonable - interestingly in 1978 the Ellenberg R value for any given
 # pH is higher. So in model need to make sure that c3 varies by year, and not
 # sure about the other parameters.
+
+# other monotonic curves instead
+# monomolecular/Mitscherlich law/von Bertalanffy law.
+a <- 7
+b <- 0
+c <- 0.3
+ym1 <- a - (a-b)*exp(-c*x)
+plot(x,ym1)
+
+# von bertalanffy
+a <- 7
+b <- 0.5
+c <- -2
+yb <- a*(1-exp(-b*(x-c)))
+plot(x,yb)
+
+# Michaelis Menten
+a <- 9
+b <- 4
+ym <- a*x/(b + x)
+
+
+dat <- data.frame(x,ym,y2,y3,yb)
+
+
+ggplot(ph_ell_long, aes(x = Soil_pH, y = Ell_R)) +
+  geom_point(size = 1) +
+  facet_wrap(~year) + 
+  geom_smooth() +
+  geom_line(data = dat, aes(x = x, y = yb), 
+            colour = "purple", size = 1.5) +
+  geom_line(data = dat, aes(x = x, y = y2), 
+            colour = "red", size = 1.5) +
+  geom_line(data = dat, aes(x = x, y = y3), 
+            colour = "orange", size = 1.5) +
+  labs(x = "Soil pH", y = "Ellenberg R")
 
 # include CaCl2 but only recent years for graphical simplicity
 phr_ell_wide <- ELL %>%
