@@ -544,6 +544,7 @@ str(CS07_IBD)
 str(CS98_IBD)
 str(CS78_IBD)
 str(GM16_IBD)
+str(CS18_ELL)
 
 # get GMEP data to have CS REP_ID 
 GMEP_CS_match <- CS16_PH %>%
@@ -561,7 +562,8 @@ GM16_IBD <- GM16_IBD %>%
 # Combine IBD files for the different years
 IBD_comb <- full_join(CS07_IBD, CS98_IBD, by = c("REP_ID07" = "REP_ID98")) %>%
   full_join(CS78_IBD, by = c("REP_ID07" = "REP_ID78")) %>%
-  full_join(GM16_IBD, by = c("REP_ID07" = "REP_ID16"))
+  full_join(GM16_IBD, by = c("REP_ID07" = "REP_ID16")) %>%
+  full_join(CS18_ELL, by = c("REP_ID07" = "REP_ID"))
 
 # Use AVC data from 2007 if it is there, otherwise 98 or 78
 IBD_comb$AVC <- ifelse(!is.na(IBD_comb$AVC07), IBD_comb$AVC07,
@@ -574,6 +576,7 @@ summary(as.factor(IBD_comb$PLOT_TYPE))
 
 # Calculate difference in Ell R over the years
 ELL <- IBD_comb %>%
+  mutate(R16 = ifelse(!is.na(R16), R16, R18)) %>%
   mutate(diff7898 = R98 - R78,
          diff7807 = R07 - R78,
          diff9807 = R07 - R98,

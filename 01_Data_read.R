@@ -40,19 +40,28 @@ library(RODBC)
 pwds <- read.csv("Outputs/pwd.csv")
 channel3 <- odbcConnect("FEGEN", uid="csgeo", pwd=pwds[pwds$uid=="csgeo","pwd"], believeNRows=FALSE)
 sqlTables(channel3, schema="CSVEG")
+channelg <- odbcConnect("tbb", uid="AXISII_WP3_VIEWER", 
+                        pwd=pwds[pwds$uid=="AXISII_WP3_VIEWER","pwd"], believeNRows=FALSE)
+
 
 # derived IBD files
 CS78_IBD <- sqlFetch(channel3, "CSVEG.IBD78")
 CS98_IBD <- sqlFetch(channel3, "CSVEG.IBD98")
 CS07_IBD <- sqlFetch(channel3, "CSVEG.IBD07")
+GM16_IBD <- sqlFetch(channelg, "GMEP_DERIVED.WP6_IBD_YRS1234")
 
 # metadata
 SPECIES_LIB_TRAITS <- sqlFetch(channel3, "CSVEG.LUS_SP_LIB_AND_TRAITS")
 SPECIES_LIB_CODES <- sqlFetch(channel3, "CSVEG.LUS_SP_LIB_CODES_NEW")
 
 # recent plant data
-VEGETATION_PLOT_SP_161819 <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOT_SP_161819")
-
+CS19_SP <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOT_SP_161819") 
+CS78_SP <- sqlFetch(channel3, "CSVEG.CS78_SPECIESDATA")
+CS90_SP <- sqlFetch(channel3, "CSVEG.CS90_SPECIESDATA")
+CS98_SP <- sqlFetch(channel3, "CSVEG.CS9899_SPECIESDATA")
+CS07_SP <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOT_SPECIES_2007")
+VEGETATION_PLOTS_20161819 <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOTS_20161819")
+VEGETATION_PLOTS_2007 <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOTS_2007")
 
 # soils data
 channel2 <- odbcConnect("MWA", uid="masq", pwd=pwds[pwds$uid=="masq","pwd"], believeNRows=FALSE)
