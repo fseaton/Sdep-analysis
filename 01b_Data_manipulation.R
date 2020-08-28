@@ -9,6 +9,39 @@ table(VEGETATION_PLOT_SP_161819[VEGETATION_PLOT_SP_161819$PLOT_TYPE=="X","PLOTYE
 str(SPECIES_LIB_TRAITS)
 filter(SPECIES_LIB_CODES, COLUMN_NAME == "GROWTH_FORM")
 
+# AVC data manipulation
+hab07 <- select(CS07_IBD, REP_ID = REP_ID07, AVC07) %>%
+  unique()
+hab90 <- select(CS90_IBD, REP_ID = REP_ID90, AVC90) %>%
+  unique()
+hab98 <- select(CS98_IBD, REP_ID = REP_ID98, AVC98) %>%
+  unique()
+hab78 <- select(CS78_IBD, REP_ID = REP_ID78, AVC78) %>%
+  unique()
+
+# create combined AVC variable, if 07 has AVC use that otherwise use 98 then 78.
+# There are only 3 sites with no AVC data and I can't see how to get theirs as
+# they don't appear in 2016/19.
+hab <- full_join(hab07, hab98) %>%
+  full_join(hab90) %>%
+  full_join(hab78) %>%
+  mutate_if(is.factor, as.character) %>%
+  mutate(AVC = ifelse(!is.na(AVC07), AVC07,
+                      ifelse(!is.na(AVC98), AVC98,
+                             ifelse(!is.na(AVC90), AVC90,
+                                           ifelse(!is.na(AVC78), AVC78, NA))))) %>%
+  mutate(AVC_desc = recode(AVC,
+                           `1` = "Crops/Weeds",
+                           `2` = "Tall herb/grass",
+                           `3` = "Fertile grassland",
+                           `4` = "Infertile grassland",
+                           `5` = "Lowland wooded",
+                           `6` = "Upland wooded",
+                           `7` = "Moorland grass/mosaic",
+                           `8` = "Heath/bog"))
+
+
+## Ellenberg scores ####
 CS18_ELL <- filter(VEGETATION_PLOT_SP_161819, PLOT_TYPE %in% c("X","XX")) %>%
   mutate(REP_ID = paste0(SQUARE,PLOT_TYPE,PLOT_NUMBER)) %>%
   mutate(REP_ID = gsub("XX","X",REP_ID)) %>%
@@ -208,6 +241,36 @@ t.test(X_wEll_comp$SM_R,X_wEll_comp$WH_R)
 # t = -0.47853, df = 18816, p-value = 0.6323
 t.test(X_Ell_comp$SM_R,X_Ell_comp$WH_R)
 # t = -3.3001, df = 19015, p-value = 0.0009682
+
+x <- na.omit(unique(X_wEll_comp$AVC_desc))
+for(i in 1:length(x)){
+  
+  dat <- filter(X_wEll_comp, AVC_desc == x[i])
+  print(paste(x[i],"p =",round(t.test(dat$SM_R,dat$WH_R)$p.value,5)))
+}
+# [1] "Tall herb/grass p = 0.85153"
+# [1] "Crops/Weeds p = 0.04266"
+# [1] "Fertile grassland p = 0.92217"
+# [1] "Heath/bog p = 2e-05"
+# [1] "Moorland grass/mosaic p = 0.12709"
+# [1] "Upland wooded p = 0.74556"
+# [1] "Infertile grassland p = 0.92811"
+# [1] "Lowland wooded p = 0.39651"
+
+x <- na.omit(unique(X_Ell_comp$AVC_desc))
+for(i in 1:length(x)){
+  dat <- filter(X_Ell_comp, AVC_desc == x[i])
+  print(paste(x[i],"p =",round(t.test(dat$SM_R,dat$WH_R)$p.value,5)))
+}
+# [1] "Tall herb/grass p = 0.91431"
+# [1] "Crops/Weeds p = 0.06944"
+# [1] "Fertile grassland p = 0.05292"
+# [1] "Heath/bog p = 0"
+# [1] "Moorland grass/mosaic p = 0"
+# [1] "Upland wooded p = 0.00329"
+# [1] "Infertile grassland p = 0.06137"
+# [1] "Lowland wooded p = 0.96831"
+
 library(patchwork)
 p1 + ggtitle("Unweighted") + p2 + ggtitle("Cover weighted")
 ggsave("Ellenberg R plot size comparison.png", path = "Outputs/Graphs/",
@@ -235,6 +298,35 @@ t.test(X_wEll_comp$SM_N,X_wEll_comp$WH_N)
 # t = -0.12149, df = 18823, p-value = 0.9033
 t.test(X_Ell_comp$SM_N,X_Ell_comp$WH_N)
 # t = -1.621, df = 19043, p-value = 0.105
+
+x <- na.omit(unique(X_wEll_comp$AVC_desc))
+for(i in 1:length(x)){
+  
+  dat <- filter(X_wEll_comp, AVC_desc == x[i])
+  print(paste(x[i],"p =",round(t.test(dat$SM_N,dat$WH_N)$p.value,5)))
+}
+# [1] "Tall herb/grass p = 0.8639"
+# [1] "Crops/Weeds p = 0.04501"
+# [1] "Fertile grassland p = 0.83626"
+# [1] "Heath/bog p = 0.03957"
+# [1] "Moorland grass/mosaic p = 0.07602"
+# [1] "Upland wooded p = 0.63365"
+# [1] "Infertile grassland p = 0.38431"
+# [1] "Lowland wooded p = 0.31157"
+
+x <- na.omit(unique(X_Ell_comp$AVC_desc))
+for(i in 1:length(x)){
+  dat <- filter(X_Ell_comp, AVC_desc == x[i])
+  print(paste(x[i],"p =",round(t.test(dat$SM_N,dat$WH_N)$p.value,5)))
+}
+# [1] "Tall herb/grass p = 0.91795"
+# [1] "Crops/Weeds p = 0.05538"
+# [1] "Fertile grassland p = 0.38703"
+# [1] "Heath/bog p = 0"
+# [1] "Moorland grass/mosaic p = 0"
+# [1] "Upland wooded p = 0.01399"
+# [1] "Infertile grassland p = 0.41287"
+# [1] "Lowland wooded p = 0.62069"
 
 # Quick fix for UK19_PH values that aren't matching to the veg plots
 UK19_PH <- UK19_PH %>%
