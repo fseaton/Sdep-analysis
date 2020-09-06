@@ -56,6 +56,7 @@ channelg <- odbcConnect("tbb", uid="AXISII_WP3_VIEWER",
 
 # derived IBD files
 CS78_IBD <- sqlFetch(channel3, "CSVEG.IBD78")
+CS90_IBD <- sqlFetch(channel3, "CSVEG.IBD90")
 CS98_IBD <- sqlFetch(channel3, "CSVEG.IBD98")
 CS07_IBD <- sqlFetch(channel3, "CSVEG.IBD07")
 GM16_IBD <- sqlFetch(channelg, "GMEP_DERIVED.WP6_IBD_YRS1234")

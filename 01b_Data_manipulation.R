@@ -249,6 +249,35 @@ t.test(X_wEll_comp$SM_R,X_wEll_comp$WH_R)
 t.test(X_Ell_comp$SM_R,X_Ell_comp$WH_R)
 # t = -3.3001, df = 19015, p-value = 0.0009682
 
+x <- na.omit(unique(X_wEll_comp$AVC_desc))
+for(i in 1:length(x)){
+  
+  dat <- filter(X_wEll_comp, AVC_desc == x[i])
+  print(paste(x[i],"p =",round(t.test(dat$SM_R,dat$WH_R)$p.value,5)))
+}
+# [1] "Tall herb/grass p = 0.85153"
+# [1] "Crops/Weeds p = 0.04266"
+# [1] "Fertile grassland p = 0.92217"
+# [1] "Heath/bog p = 2e-05"
+# [1] "Moorland grass/mosaic p = 0.12709"
+# [1] "Upland wooded p = 0.74556"
+# [1] "Infertile grassland p = 0.92811"
+# [1] "Lowland wooded p = 0.39651"
+
+x <- na.omit(unique(X_Ell_comp$AVC_desc))
+for(i in 1:length(x)){
+  dat <- filter(X_Ell_comp, AVC_desc == x[i])
+  print(paste(x[i],"p =",round(t.test(dat$SM_R,dat$WH_R)$p.value,5)))
+}
+# [1] "Tall herb/grass p = 0.91431"
+# [1] "Crops/Weeds p = 0.06944"
+# [1] "Fertile grassland p = 0.05292"
+# [1] "Heath/bog p = 0"
+# [1] "Moorland grass/mosaic p = 0"
+# [1] "Upland wooded p = 0.00329"
+# [1] "Infertile grassland p = 0.06137"
+# [1] "Lowland wooded p = 0.96831"
+
 p1 + ggtitle("Unweighted") + p2 + ggtitle("Cover weighted")
 ggsave("Ellenberg R plot size comparison.png", path = "Outputs/Graphs/",
        width = 24, height = 12, units = "cm")
@@ -276,6 +305,37 @@ t.test(X_wEll_comp$SM_N,X_wEll_comp$WH_N)
 t.test(X_Ell_comp$SM_N,X_Ell_comp$WH_N)
 # t = -1.621, df = 19043, p-value = 0.105
 
+# correlations
+x <- na.omit(unique(X_wEll_comp$AVC_desc))
+for(i in 1:length(x)){
+  
+  dat <- filter(X_wEll_comp, AVC_desc == x[i])
+  print(paste(x[i],"p =",round(t.test(dat$SM_N,dat$WH_N)$p.value,5)))
+}
+# [1] "Tall herb/grass p = 0.8639"
+# [1] "Crops/Weeds p = 0.04501"
+# [1] "Fertile grassland p = 0.83626"
+# [1] "Heath/bog p = 0.03957"
+# [1] "Moorland grass/mosaic p = 0.07602"
+# [1] "Upland wooded p = 0.63365"
+# [1] "Infertile grassland p = 0.38431"
+# [1] "Lowland wooded p = 0.31157"
+
+x <- na.omit(unique(X_Ell_comp$AVC_desc))
+for(i in 1:length(x)){
+  dat <- filter(X_Ell_comp, AVC_desc == x[i])
+  print(paste(x[i],"p =",round(t.test(dat$SM_N,dat$WH_N)$p.value,5)))
+}
+# [1] "Tall herb/grass p = 0.91795"
+# [1] "Crops/Weeds p = 0.05538"
+# [1] "Fertile grassland p = 0.38703"
+# [1] "Heath/bog p = 0"
+# [1] "Moorland grass/mosaic p = 0"
+# [1] "Upland wooded p = 0.01399"
+# [1] "Infertile grassland p = 0.41287"
+# [1] "Lowland wooded p = 0.62069"
+
+# all data
 X_Ell <- full_join(
   rename_with(X_wEll_inner, ~ paste0(.x, "_W"), starts_with("SM")),
   rename_with(X_wEll_whole, ~ paste0(.x, "_W"), starts_with("WH"))
@@ -300,6 +360,7 @@ UK19_PH <- UK19_PH %>%
                          "878X2" = "878X6",
                          "983X2" = "983X6",
                          "1056X3" = "1056X6"))
+
 
 CS78_PH$REP_ID <- paste(CS78_PH$SQUARE_NUM,CS78_PH$REP_NUM, sep = "X")
 CS98_PH$REP_ID <- paste(CS98_PH$SQUARE_NUM,CS98_PH$REP_NUM, sep = "X")
