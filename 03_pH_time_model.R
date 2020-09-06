@@ -8,7 +8,7 @@ library(tidyr)
 CS78_PH$REP_ID <- paste(CS78_PH$SQUARE_NUM,CS78_PH$REP_NUM, sep = "X")
 CS98_PH$REP_ID <- paste(CS98_PH$SQUARE_NUM,CS98_PH$REP_NUM, sep = "X")
 CS07_PH$REP_ID <- paste(CS07_PH$SQUARE_NUM,CS07_PH$REP_NUM, sep = "X")
-UK19_PH$REP_ID <- paste(UK19_PH$SQUARE_NUM,UK19_PH$REP_NUM, sep = "X")
+#UK19_PH$REP_ID <- paste(UK19_PH$SQUARE_NUM,UK19_PH$REP_NUM, sep = "X")
 
 PH_mod <- full_join(select(CS78_PH, REP_ID, PH1978),
                     select(CS98_PH, REP_ID, PH1998 = PHF2000)) %>%
@@ -163,18 +163,19 @@ ggsave("pH by year model outputs bootstrap LC.png", path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 ggplot(All_Ests, aes(x = Year)) +
-  geom_jitter(data = PH_mod, aes(x = year, y = pH), colour = "grey", alpha = 0.05, width = 1, height = 0) +
+  # geom_jitter(data = PH_mod, aes(x = year, y = pH), colour = "grey", alpha = 0.05, width = 1, height = 0) +
   # geom_dotplot(data = PH_mod, aes(x = year, y = pH, group = year), binaxis = "y", stackdir = "center",
   #              fill = "#2F7ECE", alpha = 0.05, width = 1, binwidth = 0.02) +
   geom_boxplot(data = PH_mod, aes(x = year, y = pH, group = year), colour = "grey20", alpha = 0.2, width = 1) +
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
+  # geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.3, fill = "#2F7ECE") +
   geom_point(aes(y = Estimated_Value), colour = "#2F7ECE") +
   # geom_linerange(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod)) +
   # geom_linerange(aes(ymin = Lower_Boot, ymax = Upper_Boot), size = 2) 
   labs(y = "pH")
-ggsave("pH by year model bootstrap LC and data.png", path = "Outputs/Graphs/",
+ggsave("pH by year model bootstrap LC and data boxplot.png", 
+       path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 
@@ -312,14 +313,15 @@ ggsave("LOI by year model outputs bootstrap LC.png", path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 ggplot(All_Ests, aes(x = Year)) +
-  geom_jitter(data = LOI, aes(x = year, y = LOI), colour = "grey", alpha = 0.05, width = 1, height = 0) +
+  # geom_jitter(data = LOI, aes(x = year, y = LOI), colour = "grey", alpha = 0.05, width = 1, height = 0) +
   geom_boxplot(data = LOI, aes(x = year, y = LOI, group = year), colour = "grey20", alpha = 0.2, width = 1) +
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
+  # geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.3, fill = "#2F7ECE") +
   geom_point(aes(y = Estimated_Value), colour = "#2F7ECE") +
-  labs(y = "LOI (%)")
-ggsave("LOI by year model bootstrap LC and data.png", path = "Outputs/Graphs/",
+  labs(y = "LOI (%)") +
+  scale_y_continuous(expand = expansion(mult = c(0.01,0.02)))
+ggsave("LOI by year model bootstrap LC and data boxplot.png", path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 
@@ -615,14 +617,24 @@ ggsave("LOI histogram by year.png", path = "Outputs/Graphs/",
 
 
 # Mixture model
+inv_logit <- function(x) exp(x)/(1+exp(x))
+rbeta_s <- function(n,x,y) rbeta(n, x*y, (1-x)*y)
+
+x <- rgamma(1000,3, rate=0.1)
+mu_1 <- inv_logit(rnorm(10000, -2.5, 0.2))
+mu <- inv_logit(rnorm(10000, 2.5, 0.2))
+t1 <- rbeta_s(10000,mu_1,x)
+t2 <- rbeta_s(1000,mu,x)
+hist(c(t1,t2))
+
 mix <- mixture(Beta, Beta)
 mod_pr <- c(
-  prior(normal(-2,1), class = "Intercept", dpar = "mu1"),
-  prior(normal(2,1), class = "Intercept", dpar = "mu2"),
-  prior(normal(0,.5), class = "b", dpar = "mu1"),
-  prior(normal(0,.5), class = "b", dpar = "mu2"),
-  prior(gamma(0.01,0.01), class = "phi1"),
-  prior(gamma(0.01,0.01), class = "phi2")
+  prior(normal(-2.5,0.2), class = "Intercept", dpar = "mu1"),
+  prior(normal(2.5,0.2), class = "Intercept", dpar = "mu2"),
+  prior(normal(0,.2), class = "b", dpar = "mu1"),
+  prior(normal(0,.2), class = "b", dpar = "mu2"),
+  prior(gamma(3,0.1), class = "phi1"),
+  prior(gamma(3,0.1), class = "phi2")
 )
 
 brm_LOI_mix <- brm(bf(LOI_pr ~ YR), data = LOI, family = mix,
@@ -657,41 +669,63 @@ brm_LOI_mixc <- brm(bf(LOI_pr ~ YR + (1|SERIES_NUM)),
                     prior = mod_pr, chains = 4, cores = 4)
 
 # mixture model - 3 groups
+x <- rgamma(1000,3, rate=0.1)
+x <- rgamma(1000,5, rate=0.1)
+mu_1 <- inv_logit(rnorm(1000, -2.5, 0.2) + rnorm(1000,0,.2))
+mu_2 <- inv_logit(rnorm(1000, -0.5, 0.2) + rnorm(1000,0,.2))
+mu_3 <- inv_logit(rnorm(1000, 2.5, 0.2) + rnorm(1000,0,.2))
+t1 <- rbeta_s(10000,mu_1,x)
+t2 <- rbeta_s(1000,mu_2,x)
+t3 <- rbeta_s(1000,mu_3,x)
+hist(c(t1,t2,t3))
+par(mfrow=c(1,3));hist(t1);hist(t2);hist(t3);par(mfrow=c(1,1))
+
+
 mix3 <- mixture(Beta, Beta, Beta)
 mod_pr3 <- c(
-  prior(normal(-2.5,0.5), class = "Intercept", dpar = "mu1"),
-  prior(normal(-0.5,0.5), class = "Intercept", dpar = "mu2"),
-  prior(normal(2.5,0.5), class = "Intercept", dpar = "mu3"),
-  prior(normal(0,.5), class = "b", dpar = "mu1"),
-  prior(normal(0,.5), class = "b", dpar = "mu2"),
-  prior(normal(0,.5), class = "b", dpar = "mu3"),
-  prior(gamma(0.01,0.01), class = "phi1"),
-  prior(gamma(0.01,0.01), class = "phi2"),
-  prior(gamma(0.01,0.01), class = "phi3")
+  prior(normal(-2.5,0.2), class = "Intercept", dpar = "mu1"),
+  prior(normal(-0.5,0.2), class = "Intercept", dpar = "mu2"),
+  prior(normal(2.5,0.2), class = "Intercept", dpar = "mu3"),
+  prior(normal(0,.2), class = "b", dpar = "mu1"),
+  prior(normal(0,.2), class = "b", dpar = "mu2"),
+  prior(normal(0,.2), class = "b", dpar = "mu3"),
+  prior(gamma(5,0.1), class = "phi1"),
+  prior(gamma(5,0.1), class = "phi2"),
+  prior(gamma(5,0.1), class = "phi3")
 )
 
 brm_LOI_mix3 <- brm(bf(LOI_pr ~ YR), data = LOI, family = mix3,
                     prior = mod_pr3, chains = 4, cores = 4)
 summary(brm_LOI_mix3)
 
+plot(brm_LOI_mix3)
+
+pp_check(brm_LOI_mix3, nsamples = 30) 
+
+pp_check(brm_LOI_mix3, type = "stat_2d")
+
+plot(conditional_effects(brm_LOI_mix3))
+
+saveRDS(brm_LOI_mix3, "Outputs/Models/LOI_3mix.rds")
+
 # mixture model - 3 groups + spatial
 mix3 <- mixture(Beta, Beta, Beta)
 mod_pr3 <- c(
-  prior(normal(-2.5,0.5), class = "Intercept", dpar = "mu1"),
-  prior(normal(-0.5,0.5), class = "Intercept", dpar = "mu2"),
-  prior(normal(2.5,0.5), class = "Intercept", dpar = "mu3"),
-  prior(normal(0,.5), class = "b", dpar = "mu1"),
-  prior(normal(0,.5), class = "b", dpar = "mu2"),
-  prior(normal(0,.5), class = "b", dpar = "mu3"),
-  prior(gamma(0.01,0.01), class = "phi1"),
-  prior(gamma(0.01,0.01), class = "phi2"),
-  prior(gamma(0.01,0.01), class = "phi3"),
+  prior(normal(-2.5,0.2), class = "Intercept", dpar = "mu1"),
+  prior(normal(-0.5,0.2), class = "Intercept", dpar = "mu2"),
+  prior(normal(2.5,0.2), class = "Intercept", dpar = "mu3"),
+  prior(normal(0,.2), class = "b", dpar = "mu1"),
+  prior(normal(0,.2), class = "b", dpar = "mu2"),
+  prior(normal(0,.2), class = "b", dpar = "mu3"),
+  prior(gamma(5,0.1), class = "phi1"),
+  prior(gamma(5,0.1), class = "phi2"),
+  prior(gamma(5,0.1), class = "phi3"),
   prior(student_t(3, 0, 0.2), class = "sd", dpar = "mu1"),
   prior(student_t(3, 0, 0.2), class = "sd", dpar = "mu2"),
   prior(student_t(3, 0, 0.2), class = "sd", dpar = "mu3")
 )
 
-brm_LOI_mix3b <- brm(bf(LOI_pr ~ YR + (1|SERIES_NUM)), 
+brm_LOI_mix3b <- brm(bf(LOI_pr ~ YR + (1|SERIES_NUM/REP_PLOT)), 
                      data = LOI, family = mix3,
                     prior = mod_pr3, chains = 4, cores = 4)
 summary(brm_LOI_mix3b)
