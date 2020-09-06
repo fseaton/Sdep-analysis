@@ -25,14 +25,24 @@ UK19_WET <- read_excel("../../Copy of UKSCAPE Field Survey 2019 CHEMICAL DARv3.x
 
 # veg data
 CS78_IBD <- fread("../../../CS/Data/IBD78.csv")
+CS90_IBD <- fread("../../../CS/Data/IBD90.csv")
 CS98_IBD <- fread("../../../CS/Data/IBD98.csv")
 CS07_IBD <- fread("../../../CS/Data/IBD07.csv")
 GM16_IBD <- fread("../../../CS/Data/GMEP_VEG_IBD_XNEST1.csv")
 
+# Plant species records
+CS19_SP <- fread("../../../CS/Data/VEGETATION_PLOT_SP_161819.csv")
+CS07_SP <- fread("../../../CS/Data/VEGETATION_PLOT_SPECIES_2007.csv")
+CS98_SP <- fread("../../../CS/Data/CS9899_SPECIESDATA.csv")
+CS90_SP <- fread("../../../CS/Data/CS90_SPECIESDATA.csv")
+CS78_SP <- fread("../../../CS/Data/CS78_SPECIESDATA.csv")
+
 # metadata
 BHPH_NAMES <- read.csv("../../../CS/Data/BHPH_names.csv")
 CS07_PLOTS <- read.csv("../../../CS/Data/VEGETATION_PLOTS_2007.csv")
-
+landclass_dat <- read.csv("../../../CS/Data/CS_landclass_dat.csv")
+SPECIES_LIB_TRAITS <- fread("../../../CS/Data/SPECIES_LIB_TRAITS.csv")
+SPECIES_LIB_CODES <- fread("../../../CS/Data/SPECIES_LIB_CODES.csv")
 
 # Desktop
 library(RODBC)

@@ -1,15 +1,49 @@
-# Script for calculating Ellenberg scores for the most recent survey years X plots
+# Script for various data manipulations
 library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(patchwork)
 
-str(VEGETATION_PLOT_SP_161819)
-table(VEGETATION_PLOT_SP_161819$PLOT_TYPE)
-unique(VEGETATION_PLOT_SP_161819[VEGETATION_PLOT_SP_161819$PLOT_TYPE=="XX","REP_ID"])
-table(VEGETATION_PLOT_SP_161819[VEGETATION_PLOT_SP_161819$PLOT_TYPE=="X","PLOTYEAR"])
+# AVC data manipulation ####
+hab07 <- select(CS07_IBD, REP_ID = REP_ID07, AVC07) %>%
+  unique()
+hab98 <- select(CS98_IBD, REP_ID = REP_ID98, AVC98) %>%
+  unique()
+hab90 <- select(CS90_IBD, REP_ID = REP_ID90, AVC90) %>%
+  unique()
+hab78 <- select(CS78_IBD, REP_ID = REP_ID78, AVC78) %>%
+  unique()
+
+# create combined AVC variable, if 07 has AVC use that otherwise use 98 then 78.
+# There are only 3 sites with no AVC data and I can't see how to get theirs as
+# they don't appear in 2016/19.
+hab <- full_join(hab07, hab98) %>% 
+  full_join(hab90) %>% full_join(hab78) %>%
+  mutate_if(is.factor, as.character) %>%
+  mutate(AVC = ifelse(!is.na(AVC07), AVC07,
+                      ifelse(!is.na(AVC98), AVC98,
+                             ifelse(!is.na(AVC90), AVC90,
+                                    ifelse(!is.na(AVC78), AVC78, NA))))) %>%
+  mutate(AVC_desc = recode(AVC,
+                           `1` = "Crops/Weeds",
+                           `2` = "Tall herb/grass",
+                           `3` = "Fertile grassland",
+                           `4` = "Infertile grassland",
+                           `5` = "Lowland wooded",
+                           `6` = "Upland wooded",
+                           `7` = "Moorland grass/mosaic",
+                           `8` = "Heath/bog"))
+
+# Ellenberg scores ####
+str(CS19_SP)
+table(CS19_SP$PLOT_TYPE)
+unique(CS19_SP[CS19_SP$PLOT_TYPE=="XX","REP_ID"])
+table(CS19_SP[CS19_SP$PLOT_TYPE=="X","PLOTYEAR"])
 
 str(SPECIES_LIB_TRAITS)
 filter(SPECIES_LIB_CODES, COLUMN_NAME == "GROWTH_FORM")
 
-CS18_ELL <- filter(VEGETATION_PLOT_SP_161819, PLOT_TYPE %in% c("X","XX")) %>%
+CS18_ELL <- filter(CS19_SP, PLOT_TYPE %in% c("X","XX")) %>%
   mutate(REP_ID = paste0(SQUARE,PLOT_TYPE,PLOT_NUMBER)) %>%
   mutate(REP_ID = gsub("XX","X",REP_ID)) %>%
   left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
@@ -49,7 +83,7 @@ summary(CS18_ELL)
 
 # Ellenberg for inner 2x2m square
 X_Ell_inner <- CS07_SP %>%
-  left_join(select(VEGETATION_PLOTS_2007, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
+  left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
   filter(PLOT_TYPE == "X" & NEST_LEVEL < 2)  %>%
   mutate(Year = 2007) %>%
   select(REP_ID, Year, BRC_NUMBER, FIRST_COVER, TOTAL_COVER) %>%
@@ -60,7 +94,7 @@ X_Ell_inner <- CS07_SP %>%
                    REP_ID, Year, BRC_NUMBER, FIRST_COVER, TOTAL_COVER)) %>%
   full_join(select(mutate(filter(CS90_SP, grepl("X", REP_ID) & QUADRAT_NEST < 2), Year = 1990),
                    REP_ID, Year, BRC_NUMBER, FIRST_COVER = C1, TOTAL_COVER)) %>%
-  full_join(select(mutate(filter(CS78_SP, grepl("X", REP_ID)), Year = 1978),
+  full_join(select(mutate(filter(CS78_SP, grepl("X", REP_ID) & QUADRAT_NEST < 2), Year = 1978),
                    REP_ID, Year, BRC_NUMBER, TOTAL_COVER = COVER)) %>%
   left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
                    starts_with("EBER"))) %>%
@@ -71,7 +105,7 @@ X_Ell_inner <- CS07_SP %>%
   mutate_all(function(x) ifelse(!is.nan(x), x, NA))
 
 X_Ell_whole <- CS07_SP %>%
-  left_join(select(VEGETATION_PLOTS_2007, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
+  left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
   filter(PLOT_TYPE == "X")  %>%
   mutate(Year = 2007) %>%
   select(REP_ID, Year, BRC_NUMBER, TOTAL_COVER) %>% unique() %>%
@@ -99,24 +133,30 @@ X_Ell_comp <- full_join(X_Ell_inner, X_Ell_whole) %>%
          W_diff = SM_W - WH_W,
          L_diff = SM_L - WH_L)
 
-p1 <- ggplot(filter(X_Ell_comp, Year != 1978), aes(x = WH_R, y = SM_R)) +
+p1 <- ggplot(X_Ell_comp, aes(x = WH_R, y = SM_R)) +
   geom_point(size=0.5) +
   geom_abline(intercept = 0, slope = 1) +
   facet_wrap(~AVC_desc) +
   labs(x = bquote("Ellenberg R 400m"^2~"plot"),
        y = bquote("Ellenberg R 4m"^2~"plot"))
 
-ggplot(filter(X_Ell_comp, Year != 1978), aes(x = WH_N, y = SM_N)) +
+ggplot(X_Ell_comp, aes(x = WH_N, y = SM_N)) +
   geom_point() +
   geom_abline(intercept = 0, slope = 1) +
   facet_wrap(~AVC_desc)
 
-ggplot(filter(X_Ell_comp, Year != 1978), aes(x = R_diff)) +
+ggplot(X_Ell_comp, aes(x = R_diff)) +
   geom_histogram() +
   geom_vline(xintercept = 0) +
   facet_wrap(~AVC_desc)
 
-ggplot(filter(X_Ell_comp, Year != 1978), aes(x = N_diff)) +
+ggplot(X_Ell_comp, aes(x = WH_R, y = SM_R)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_grid(Year~AVC_desc) +
+  theme_bw()
+
+ggplot(X_Ell_comp, aes(x = N_diff)) +
   geom_histogram() +
   geom_vline(xintercept = 0) +
   facet_wrap(~AVC_desc)
@@ -132,7 +172,7 @@ X_Ell_comp %>%
 
 # weighted mean Ellenberg 
 X_wEll_inner <- CS07_SP %>%
-  left_join(select(VEGETATION_PLOTS_2007, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
+  left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
   filter(PLOT_TYPE == "X" & NEST_LEVEL < 2)  %>%
   mutate(Year = 2007) %>%
   select(REP_ID, Year, BRC_NUMBER, FIRST_COVER, TOTAL_COVER) %>%
@@ -154,7 +194,7 @@ X_wEll_inner <- CS07_SP %>%
   mutate_all(function(x) ifelse(!is.nan(x), x, NA))
 
 X_wEll_whole <- CS07_SP %>%
-  left_join(select(VEGETATION_PLOTS_2007, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
+  left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
   filter(PLOT_TYPE == "X")  %>%
   mutate(Year = 2007) %>%
   select(REP_ID, Year, BRC_NUMBER, TOTAL_COVER) %>% unique() %>%
@@ -208,7 +248,7 @@ t.test(X_wEll_comp$SM_R,X_wEll_comp$WH_R)
 # t = -0.47853, df = 18816, p-value = 0.6323
 t.test(X_Ell_comp$SM_R,X_Ell_comp$WH_R)
 # t = -3.3001, df = 19015, p-value = 0.0009682
-library(patchwork)
+
 p1 + ggtitle("Unweighted") + p2 + ggtitle("Cover weighted")
 ggsave("Ellenberg R plot size comparison.png", path = "Outputs/Graphs/",
        width = 24, height = 12, units = "cm")
@@ -236,6 +276,18 @@ t.test(X_wEll_comp$SM_N,X_wEll_comp$WH_N)
 t.test(X_Ell_comp$SM_N,X_Ell_comp$WH_N)
 # t = -1.621, df = 19043, p-value = 0.105
 
+X_Ell <- full_join(
+  rename_with(X_wEll_inner, ~ paste0(.x, "_W"), starts_with("SM")),
+  rename_with(X_wEll_whole, ~ paste0(.x, "_W"), starts_with("WH"))
+) %>%
+  full_join(
+    rename_with(X_Ell_inner, ~ paste0(.x, "_UW"), starts_with("SM"))
+  ) %>%
+  full_join(
+    rename_with(X_Ell_whole, ~ paste0(.x, "_UW"), starts_with("WH"))
+  )
+
+# pH data ####
 # Quick fix for UK19_PH values that aren't matching to the veg plots
 UK19_PH <- UK19_PH %>%
   mutate(REP_ID = paste(SQUARE_NUM,REP_NUM, sep = "X")) %>%
@@ -248,4 +300,63 @@ UK19_PH <- UK19_PH %>%
                          "878X2" = "878X6",
                          "983X2" = "983X6",
                          "1056X3" = "1056X6"))
+
+CS78_PH$REP_ID <- paste(CS78_PH$SQUARE_NUM,CS78_PH$REP_NUM, sep = "X")
+CS98_PH$REP_ID <- paste(CS98_PH$SQUARE_NUM,CS98_PH$REP_NUM, sep = "X")
+CS07_PH$REP_ID <- paste(CS07_PH$SQUARE_NUM,CS07_PH$REP_NUM, sep = "X")
+CS16_PH$REP_ID <- paste(CS16_PH$SQUARE_NUM,CS16_PH$REP_NUM, sep = "X")
+
+# wide format pH
+PH <- full_join(select(CS78_PH, REP_ID, PH_1978 = PH1978),
+                select(CS98_PH, REP_ID, PH_1998 = PHF2000)) %>%
+  full_join(select(CS07_PH, REP_ID, PH_2007 = PH2007_IN_WATER, PHC_2007 = PH2007_IN_CACL2)) %>%
+  full_join(select(CS16_PH, REP_ID, PH_2016 = PH_DIW, PHC_2016 = PH_CACL2)) %>%
+  full_join(select(UK19_PH, REP_ID, PH_2019 = PH_DIW, PHC_2019 = PH_CACL))
+str(PH)
+summary(PH)
+
+# long format pH
+PH_long <- pivot_longer(PH, starts_with("PH"),
+                        values_to = "pH",
+                        values_drop_na = TRUE,
+                        names_to = c("variable","Year"),
+                        names_sep = "_",
+                        names_transform = list(Year = as.integer)) %>%
+  mutate(variable = ifelse(variable == "PH", "pH","pH_CaCl2")) %>%
+  pivot_wider(names_from = variable, values_from = pH)
+PH_long
+
+# pH differences
+# calculate differences between survey years 
+PH <- PH %>%
+  mutate(diff7898 = PH_2000 - PH_1978,
+         diff7807 = PH_2007 - PH_1978,
+         diff7816 = PH_2016 - PH_1978,
+         diff7819 = PH_2019 - PH_1978,
+         diff9807 = PH_2007 - PH_2000,
+         diff9816 = PH_2016 - PH_2000,
+         diff9819 = PH_2019 - PH_2000,
+         diff0716 = PH_2016 - PH_2007,
+         diff0719 = PH_2019 - PH_2007) %>%
+  mutate(diff0718 = ifelse(!is.na(diff0719), diff0719,
+                           ifelse(!is.na(diff0716), diff0716, NA)),
+         diff7818 = ifelse(!is.na(diff7819), diff7819,
+                           ifelse(!is.na(diff7816), diff7816, NA)),
+         diff9818 = ifelse(!is.na(diff9819), diff9819,
+                           ifelse(!is.na(diff9816), diff9816, NA)))
+summary(PH)
+
+PH_diff_long <- PH %>%
+  select(REP_ID, starts_with("diff")) %>%
+  pivot_longer(starts_with("diff"),
+               values_to = "pH",
+               values_drop_na = TRUE) %>%
+  mutate(name = as.factor(name)) %>%
+  mutate(name = forcats::fct_inorder(name))
+
+# select only most recent change and convert into wide format for plotting
+PH_Diff_wide <- select(PH, REP_ID, diff0718) %>%
+  na.omit() %>%
+  left_join(select(CS07_PLOTS, REP_ID, POINT_X, POINT_Y))
+
 
