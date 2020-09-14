@@ -677,21 +677,21 @@ summary(brm_LOI_mix3)
 # mixture model - 3 groups + spatial
 mix3 <- mixture(Beta, Beta, Beta)
 mod_pr3 <- c(
-  prior(normal(-2.5,0.5), class = "Intercept", dpar = "mu1"),
-  prior(normal(-0.5,0.5), class = "Intercept", dpar = "mu2"),
-  prior(normal(2.5,0.5), class = "Intercept", dpar = "mu3"),
-  prior(normal(0,.5), class = "b", dpar = "mu1"),
-  prior(normal(0,.5), class = "b", dpar = "mu2"),
-  prior(normal(0,.5), class = "b", dpar = "mu3"),
-  prior(gamma(0.01,0.01), class = "phi1"),
-  prior(gamma(0.01,0.01), class = "phi2"),
-  prior(gamma(0.01,0.01), class = "phi3"),
-  prior(student_t(3, 0, 0.2), class = "sd", dpar = "mu1"),
-  prior(student_t(3, 0, 0.2), class = "sd", dpar = "mu2"),
-  prior(student_t(3, 0, 0.2), class = "sd", dpar = "mu3")
+  prior(normal(-2.5,0.2), class = "Intercept", dpar = "mu1"),
+  prior(normal(-0.5,0.2), class = "Intercept", dpar = "mu2"),
+  prior(normal(2.5,0.2), class = "Intercept", dpar = "mu3"),
+  prior(normal(0,.2), class = "b", dpar = "mu1"),
+  prior(normal(0,.2), class = "b", dpar = "mu2"),
+  prior(normal(0,.2), class = "b", dpar = "mu3"),
+  prior(gamma(5,0.1), class = "phi1"),
+  prior(gamma(5,0.1), class = "phi2"),
+  prior(gamma(5,0.1), class = "phi3"),
+  prior(normal(0, 0.2), class = "sd", dpar = "mu1"),
+  prior(normal(0, 0.2), class = "sd", dpar = "mu2"),
+  prior(normal(0, 0.2), class = "sd", dpar = "mu3")
 )
 
-brm_LOI_mix3b <- brm(bf(LOI_pr ~ YR + (1|SERIES_NUM)), 
+brm_LOI_mix3b <- brm(bf(LOI_pr ~ YR + (1|SERIES_NUM/REP_PLOT)), 
                      data = LOI, family = mix3,
                     prior = mod_pr3, chains = 4, cores = 4)
 summary(brm_LOI_mix3b)
