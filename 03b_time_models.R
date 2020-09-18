@@ -548,3 +548,50 @@ bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$PH)), pr,
                               as.data.frame(mod_data)[!is.na(mod_data$PH),"YR"]))
 plot(conditional_effects(ph_c_hab_mod), ask = FALSE)
 
+
+# pH against rainfall
+str(Comb)
+Comb_rain <- cs_survey_rainfall %>%
+  mutate(Year = as.numeric(Year)) %>%
+  full_join(Comb) %>%
+  full_join(cs_loc_rain30y) %>%
+  full_join(cs_loc_sumrain30y) %>%
+  mutate(rain_diff_sum = mean_rainfall - SUM/3)
+
+coplot(pH ~ mean_rainfall|RAIN_8110, data = Comb_rain)
+
+ggplot(Comb_rain, aes(x = mean_rainfall, y = pH, colour = Year)) +
+  geom_point()
+
+ggplot(Comb_rain, aes(x = RAIN_8110, y = pH, colour = Year)) +
+  geom_point()
+
+Comb_rain %>%
+  ggplot(aes(x=rain_diff_sum, y = pH, colour = YEAR)) +
+  geom_point()
+
+
+# Bayesian model
+mod_data <- Comb_rain %>% ungroup() %>%
+  select(Year, REP_ID, mean_rainfall, pH, Habitat, rain_diff_sum, RAIN_8110) %>%
+  mutate(YR = as.factor(Year),
+         SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1)) %>%
+  mutate(YRnm = as.integer(YR)) %>%
+  na.omit()
+
+get_prior(pH ~ Year + Habitat + rain_diff_sum + RAIN_8110 + (1|SERIES_NUM) +
+            ar(time = YRnm, gr = REP_ID), data = mod_data)
+mod_pr <- c(prior(normal(0,0.5), class = "b"),
+            prior(normal(5,0.5), class = "Intercept"),
+            prior(normal(0.5,0.2), class = "ar"),
+            prior(student_t(3, 0, 1), class = "sd"))
+ph_rain_mod <- brm(pH ~ YR + Habitat + rain_diff_sum*RAIN_8110 + (1|SERIES_NUM) +
+                     ar(time = YRnm, gr = REP_ID), data = mod_data,
+                   prior = mod_pr, cores = 8, iter = 8000,
+                   file = paste0("Outputs/Models/Year_models/ph_rain_mod_",Sys.Date()))
+# took forever to run and failed miserably
+
+ph_rain_mod_nohab <- brm(pH ~ YR + rain_diff_sum*RAIN_8110 + (1|SERIES_NUM) +
+                           ar(time = YRnm, gr = REP_ID), data = mod_data,
+                         prior = mod_pr, cores = 8, iter = 8000,
+                         file = paste0("Outputs/Models/Year_models/ph_rain_mod_",Sys.Date()))

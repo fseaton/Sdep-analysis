@@ -53,7 +53,6 @@ sqlTables(channel3, schema="CSVEG")
 channelg <- odbcConnect("tbb", uid="AXISII_WP3_VIEWER", 
                         pwd=pwds[pwds$uid=="AXISII_WP3_VIEWER","pwd"], believeNRows=FALSE)
 
-
 # derived IBD files
 CS78_IBD <- sqlFetch(channel3, "CSVEG.IBD78")
 CS90_IBD <- sqlFetch(channel3, "CSVEG.IBD90")
@@ -72,7 +71,10 @@ CS90_SP <- sqlFetch(channel3, "CSVEG.CS90_SPECIESDATA")
 CS98_SP <- sqlFetch(channel3, "CSVEG.CS9899_SPECIESDATA")
 CS07_SP <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOT_SPECIES_2007")
 VEGETATION_PLOTS_20161819 <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOTS_20161819")
-VEGETATION_PLOTS_2007 <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOTS_2007")
+CS07_PLOTS <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOTS_2007")
+CS98_PLOTS <- sqlFetch(channel3, "CSVEG.CS9899_QUADS_DESCRIPTION")
+CS90_PLOTS <- sqlFetch(channel3, "CSVEG.CS90_QUADS_DESCRIPTION")
+CS78_PLOTS <- sqlFetch(channel3, "CSVEG.CS78_QUADS_DESCRIPTION")
 
 # soils data
 channel2 <- odbcConnect("MWA", uid="masq", pwd=pwds[pwds$uid=="masq","pwd"], believeNRows=FALSE)
@@ -93,3 +95,5 @@ channel <- odbcConnect("MWA", uid = "lus_user", pwd = pwds[pwds$uid=="lus_user",
                        case = "nochange", believeNRows = FALSE)
 sqlTables(channel, schema = "DB_CSSQUARES")
 landclass_dat <- sqlFetch(channel, "DB_CSSQUARES.SQUARES_FILE_ALL_LC")
+plot_locations <- sqlFetch(channel, "DB_CSSQUARES.SQUARE_AND_PLOT_LOCATIONS")
+plot_dates <- sqlFetch(channel, "DB_CSSQUARES.DATEVARS_78_84_90_98_07")

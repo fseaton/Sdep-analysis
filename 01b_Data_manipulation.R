@@ -3,6 +3,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(patchwork)
+library(sf)
 
 # AVC data manipulation ####
 hab07 <- select(CS07_IBD, REP_ID = REP_ID07, AVC07) %>%
@@ -420,4 +421,199 @@ PH_Diff_wide <- select(PH, REP_ID, diff0718) %>%
   na.omit() %>%
   left_join(select(CS07_PLOTS, REP_ID, POINT_X, POINT_Y))
 
+
+# Spatial data manipulation ####
+# rainfall - monthly totals
+rain07 <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_200701-200712.nc"
+rain <- raster::brick(rain07)
+
+cs_loc07 <- plot_locations %>%
+  filter(YEAR == "y07") %>%
+  dplyr::select(REP_ID, E_10_FIG_1M, N_10_FIG_1M) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("E_10_FIG_1M","N_10_FIG_1M"), crs = 27700)
+
+cs_loc_rain <- raster::extract(rain, cs_loc07)
+rownames(cs_loc_rain) <- cs_loc07$REP_ID
+colnames(cs_loc_rain) <- paste("X",c(1:12), "2007", sep = "_")
+cs_loc_rain07_long <- cs_loc_rain %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("REP_ID") %>%
+  pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
+               names_prefix = "X_", names_sep = "_",
+               values_to = "rainfall") %>%
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
+         rainfall = ifelse(rainfall < 9e20, rainfall, NA))
+
+str(plot_dates)
+sample_date <- plot_dates %>%
+  select(SERIES_NUM, starts_with("MID_")) %>%
+  mutate(across(starts_with("MID_"), lubridate::ymd)) %>%
+  mutate(across(starts_with("MID_"), lubridate::month))
+
+cs_loc_rain07_long <- cs_loc_rain07_long %>%
+  left_join(select(sample_date, SERIES_NUM, DATE = MID__DATE07)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
+  filter(field_season == 1) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(mean_rainfall = mean(rainfall),
+            sum_rainfall = sum(rainfall))
+
+
+
+# 1998
+rain98 <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_199801-199812.nc"
+rain <- raster::brick(rain98)
+
+cs_loc98 <- plot_locations %>%
+  filter(YEAR == "y9899") %>%
+  dplyr::select(REP_ID, E_10_FIG_1M, N_10_FIG_1M) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("E_10_FIG_1M","N_10_FIG_1M"), crs = 27700)
+
+cs_loc_rain98 <- raster::extract(rain, cs_loc98)
+rownames(cs_loc_rain98) <- cs_loc98$REP_ID
+colnames(cs_loc_rain98) <- paste("X",c(1:12), "1998", sep = "_")
+
+cs_loc_rain98_long <- cs_loc_rain98 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("REP_ID") %>%
+  pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
+               names_prefix = "X_", names_sep = "_",
+               values_to = "rainfall") %>%
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
+         rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
+  left_join(select(sample_date, SERIES_NUM, DATE = MID_DATE98)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
+  filter(field_season == 1) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(mean_rainfall = mean(rainfall),
+            sum_rainfall = sum(rainfall))
+
+# 1990
+rain90 <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_199001-199012.nc"
+rain <- raster::brick(rain90)
+
+cs_loc90 <- plot_locations %>%
+  filter(YEAR == "y90") %>%
+  dplyr::select(REP_ID, E_10_FIG_1M, N_10_FIG_1M) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("E_10_FIG_1M","N_10_FIG_1M"), crs = 27700)
+
+cs_loc_rain90 <- raster::extract(rain, cs_loc90)
+rownames(cs_loc_rain90) <- cs_loc90$REP_ID
+colnames(cs_loc_rain90) <- paste("X",c(1:12), "1990", sep = "_")
+
+cs_loc_rain90_long <- cs_loc_rain90 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("REP_ID") %>%
+  pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
+               names_prefix = "X_", names_sep = "_",
+               values_to = "rainfall") %>%
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
+         rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
+  left_join(select(sample_date, SERIES_NUM, DATE = MID_DATE90)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
+  filter(field_season == 1) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(mean_rainfall = mean(rainfall),
+            sum_rainfall = sum(rainfall))
+
+
+# 1978
+rain78 <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_197801-197812.nc"
+rain <- raster::brick(rain78)
+
+cs_loc78 <- plot_locations %>%
+  filter(YEAR == "y78") %>%
+  dplyr::select(REP_ID, E_10_FIG_1M, N_10_FIG_1M) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("E_10_FIG_1M","N_10_FIG_1M"), crs = 27700)
+
+cs_loc_rain78 <- raster::extract(rain, cs_loc78)
+rownames(cs_loc_rain78) <- cs_loc78$REP_ID
+colnames(cs_loc_rain78) <- paste("X",c(1:12), "1978", sep = "_")
+
+cs_loc_rain78_long <- cs_loc_rain78 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("REP_ID") %>%
+  pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
+               names_prefix = "X_", names_sep = "_",
+               values_to = "rainfall") %>%
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
+         rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
+  left_join(select(sample_date, SERIES_NUM, DATE = MID_DATE78)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
+  filter(field_season == 1) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(mean_rainfall = mean(rainfall),
+            sum_rainfall = sum(rainfall))
+
+#combine years
+cs_survey_rainfall <- do.call(rbind, list(cs_loc_rain07_long,
+                                          cs_loc_rain98_long,
+                                          cs_loc_rain90_long,
+                                          cs_loc_rain78_long))
+ggplot(cs_survey_rainfall, aes(x = mean_rainfall)) +
+  geom_histogram() +
+  facet_wrap(~Year) +
+  labs(x = "Average monthly rainfall for 4 months pre-survey")
+
+p1 <- ggplot(cs_survey_rainfall, aes(x = mean_rainfall)) +
+  geom_histogram() +
+  facet_wrap(~Year, ncol = 1, scales = "free_y") +
+  scale_x_continuous(expand = c(0,0)) +
+  labs(x = "Average monthly rainfall for 4 months pre-survey")
+p2 <- ggplot(cs_survey_rainfall, aes(x = sum_rainfall)) +
+  geom_histogram() +
+  facet_wrap(~Year, ncol = 1, scales = "free_y") +
+  scale_x_continuous(expand = c(0,0)) +
+  labs(x = "Total rainfall for 4 months pre-survey")
+p1 + p2
+
+ggplot(cs_survey_rainfall, aes(x = mean_rainfall, y = sum_rainfall)) + 
+  geom_point() +
+  geom_abline(slope=4, intercept = 0) +
+  facet_wrap(~Year)
+# basically the same
+
+p1
+ggsave("Average monthly rainfall for 4 months pre-survey.png",
+       path = "Outputs/Graphs/",width = 12, height = 15, units = "cm")
+
+
+# Climatic averages
+str(plot_locations)
+allplot_loc <- plot_locations %>%
+  select(REP_ID, YEAR, E_10_FIG_1M, N_10_FIG_1M) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("E_10_FIG_1M","N_10_FIG_1M"), crs = 27700)
+
+clim_rain <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_ann-30y_198101-201012.nc"
+rain <- raster::brick(clim_rain)
+cs_loc_rain30y <- raster::extract(rain, allplot_loc)
+colnames(cs_loc_rain30y) <- "RAIN_8110"
+cs_loc_rain30y <- cbind(as.data.frame(allplot_loc),cs_loc_rain30y)
+cs_loc_rain30y <- cs_loc_rain30y %>%
+  select(-geometry) %>%
+  mutate(RAIN_8110 = ifelse(RAIN_8110 < 9e20, RAIN_8110, NA),
+         Year = recode(YEAR,
+                       "y07" = 2007,
+                       "y9899" = 1998,
+                       "y90" = 1990,
+                       "y78" = 1978))
+
+sum_rain <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_seas-30y_198101-201012.nc"
+rain <- raster::brick(sum_rain)
+cs_loc_sumrain30y <- raster::extract(rain, allplot_loc)
+colnames(cs_loc_sumrain30y) <- c("WIN","SPR","SUM","AUT")
+cs_loc_sumrain30y <- cbind(as.data.frame(allplot_loc),cs_loc_sumrain30y)
+cs_loc_sumrain30y <- cs_loc_sumrain30y %>%
+  select(-geometry) %>%
+  mutate(across(WIN:AUT, function(x) ifelse(x < 9e20,x, NA)),
+         Year = recode(YEAR,
+                       "y07" = 2007,
+                       "y9899" = 1998,
+                       "y90" = 1990,
+                       "y78" = 1978))
 
