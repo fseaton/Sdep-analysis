@@ -390,13 +390,13 @@ PH_long
 # pH differences
 # calculate differences between survey years 
 PH <- PH %>%
-  mutate(diff7898 = PH_2000 - PH_1978,
+  mutate(diff7898 = PH_1998 - PH_1978,
          diff7807 = PH_2007 - PH_1978,
          diff7816 = PH_2016 - PH_1978,
          diff7819 = PH_2019 - PH_1978,
-         diff9807 = PH_2007 - PH_2000,
-         diff9816 = PH_2016 - PH_2000,
-         diff9819 = PH_2019 - PH_2000,
+         diff9807 = PH_2007 - PH_1998,
+         diff9816 = PH_2016 - PH_1998,
+         diff9819 = PH_2019 - PH_1998,
          diff0716 = PH_2016 - PH_2007,
          diff0719 = PH_2019 - PH_2007) %>%
   mutate(diff0718 = ifelse(!is.na(diff0719), diff0719,
