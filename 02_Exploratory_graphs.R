@@ -957,3 +957,48 @@ MOISTURE_PH$Year_cat <- as.factor(MOISTURE_PH$year)
 get_prior(bf(pH ~ a*exp(b*Moisture) + c*exp(d*Moisture) + e, 
              a + b + c + d + e ~1, nl = TRUE),
           data = MOISTURE_PH)
+
+
+
+# pH and atmospheric deposition ####
+ph_atdep <- PH %>% select(REP_ID, diff7807) %>%
+  mutate(Year = 2007) %>%
+  left_join(CS_plot_atdep)
+
+ggplot(ph_atdep, aes(x = Sdep, y = diff7807))+ 
+  geom_point()
+
+ph_atdep <- PH %>% select(REP_ID, diff7819) %>%
+  mutate(Year = 2018) %>%
+  left_join(CS_plot_atdep)
+
+ggplot(ph_atdep, aes(x = Sdep, y = diff7819))+ 
+  geom_point()
+
+ph_atdep <- PH %>% select(REP_ID, PH_2007) %>%
+  mutate(Year = 2007) %>%
+  left_join(CS_plot_atdep)
+
+ggplot(ph_atdep, aes(x = Sdep, y = PH_2007))+ 
+  geom_point()
+
+
+# soil N against N deposition
+summary(CS07_CN)
+CN_atdep <- CS07_CN %>% 
+  mutate(CN_ratio = C_PERCENT/N_PERCENT,
+         Year = 2007,
+         REP_ID = REP_ID07) %>%
+  select(REP_ID, Year, CN_ratio) %>%
+  full_join(mutate(CS98_CN,
+                   CN_ratio = C_PERCENT/N_PERCENT,
+                   Year = 1998,
+                   REP_ID = REP_ID98)) %>%
+  left_join(CS_plot_atdep)
+
+
+ggplot(CN_atdep, 
+       aes(x = Ndep, y = CN_ratio)) +
+  geom_point() +
+  labs(x = "Cumulative N deposition", y = "C:N") +
+  facet_wrap(~Year + Habitat, nrow = 3)

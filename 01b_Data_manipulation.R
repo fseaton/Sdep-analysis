@@ -617,3 +617,152 @@ cs_loc_sumrain30y <- cs_loc_sumrain30y %>%
                        "y90" = 1990,
                        "y78" = 1978))
 
+
+# Atmospheric deposition data ####
+# Cumulative N deposition calculation
+str(Ndep_avg)
+
+Ndep_avg_cumsum <- Ndep_avg %>%
+  mutate(Navg_cumdep78 = rowSums(select(.,gridavg_1970:gridavg_1978)),
+         Navg_cumdep90 = rowSums(select(.,gridavg_1970:gridavg_1990)),
+         Navg_cumdep98 = rowSums(select(.,gridavg_1970:gridavg_1998)),
+         Navg_cumdep07 = rowSums(select(.,gridavg_1970:gridavg_2007)),
+         Navg_cumdep18 = rowSums(select(.,gridavg_1970:gridavg_2018)),
+         Navg_cumdep07_30 = rowSums(select(.,gridavg_1977:gridavg_2007)),
+         Navg_cumdep18_30 = rowSums(select(.,gridavg_1988:gridavg_2018))) %>%
+  select(x,y,contains("cumdep"))
+
+Ndep_for_cumsum <- Ndep_for %>%
+  mutate(Nfor_cumdep78 = rowSums(select(.,forest_1970:forest_1978)),
+         Nfor_cumdep90 = rowSums(select(.,forest_1970:forest_1990)),
+         Nfor_cumdep98 = rowSums(select(.,forest_1970:forest_1998)),
+         Nfor_cumdep07 = rowSums(select(.,forest_1970:forest_2007)),
+         Nfor_cumdep18 = rowSums(select(.,forest_1970:forest_2018)),
+         Nfor_cumdep07_30 = rowSums(select(.,forest_1977:forest_2007)),
+         Nfor_cumdep18_30 = rowSums(select(.,forest_1988:forest_2018))) %>%
+  select(x,y,contains("cumdep"))
+
+Ndep_moo_cumsum <- Ndep_moo %>%
+  mutate(Nmoo_cumdep78 = rowSums(select(.,moor_1970:moor_1978)),
+         Nmoo_cumdep90 = rowSums(select(.,moor_1970:moor_1990)),
+         Nmoo_cumdep98 = rowSums(select(.,moor_1970:moor_1998)),
+         Nmoo_cumdep07 = rowSums(select(.,moor_1970:moor_2007)),
+         Nmoo_cumdep18 = rowSums(select(.,moor_1970:moor_2018)),
+         Nmoo_cumdep07_30 = rowSums(select(.,moor_1977:moor_2007)),
+         Nmoo_cumdep18_30 = rowSums(select(.,moor_1988:moor_2018))) %>%
+  select(x,y,contains("cumdep"))
+
+Ndep_cumsum <- full_join(Ndep_avg_cumsum, 
+                         Ndep_for_cumsum) %>%
+  full_join(Ndep_moo_cumsum)
+
+Ndep_cumsum70 <- Ndep_cumsum %>%
+  select(-ends_with("_30")) %>%
+  melt(id.vars = c("x","y"), variable.factor = FALSE, 
+       value.name = "Ndep") %>%
+  mutate(Year = recode(substring(variable,12,13),
+                       "78" = 1978,
+                       "90" = 1990,
+                       "98" = 1998,
+                       "07" = 2007,
+                       "18" = 2018),
+         Habitat = recode(substring(variable, 2,4),
+                          "avg" = "gridavg",
+                          "for" = "forest",
+                          "moo" = "moor")) %>% select(-variable)
+
+# Rate of change for Sdep
+str(Sdep_avg)
+Sdep_avg_change <- Sdep_avg %>%
+  mutate(Savg_change78 = gridavg_1978 - gridavg_1970,
+         Savg_change90 = gridavg_1990 - gridavg_1970,
+         Savg_change98 = gridavg_1998 - gridavg_1970,
+         Savg_change07 = gridavg_2007 - gridavg_1970,
+         Savg_change18 = gridavg_2018 - gridavg_1970,
+         Savg_change07_30 = gridavg_2007 - gridavg_1977,
+         Savg_change18_30 = gridavg_2018 - gridavg_1988) %>%
+  select(x,y,contains("change"))
+
+Sdep_for_change <- Sdep_for %>%
+  mutate(Sfor_change78 = forest_1978 - forest_1970,
+         Sfor_change90 = forest_1990 - forest_1970,
+         Sfor_change98 = forest_1998 - forest_1970,
+         Sfor_change07 = forest_2007 - forest_1970,
+         Sfor_change18 = forest_2018 - forest_1970,
+         Sfor_change07_30 = forest_2007 - forest_1977,
+         Sfor_change18_30 = forest_2018 - forest_1988) %>%
+  select(x,y,contains("change"))
+
+Sdep_moo_change <- Sdep_moo %>%
+  mutate(Smoo_change78 = moor_1978 - moor_1970,
+         Smoo_change90 = moor_1990 - moor_1970,
+         Smoo_change98 = moor_1998 - moor_1970,
+         Smoo_change07 = moor_2007 - moor_1970,
+         Smoo_change18 = moor_2018 - moor_1970,
+         Smoo_change07_30 = moor_2007 - moor_1977,
+         Smoo_change18_30 = moor_2018 - moor_1988) %>%
+  select(x,y,contains("change"))
+
+Sdep_change <- full_join(Sdep_avg_change, 
+                         Sdep_for_change) %>%
+  full_join(Sdep_moo_change)
+
+Sdep_change70 <- Sdep_change %>%
+  select(-ends_with("_30")) %>%
+  melt(id.vars = c("x","y"), variable.factor = FALSE, 
+       value.name = "Sdep") %>%
+  mutate(Year = recode(substring(variable,12,13),
+                       "78" = 1978,
+                       "90" = 1990,
+                       "98" = 1998,
+                       "07" = 2007,
+                       "18" = 2018),
+         Habitat = recode(substring(variable, 2,4),
+                          "avg" = "gridavg",
+                          "for" = "forest",
+                          "moo" = "moor")) %>% select(-variable)
+
+AtmosDep_70 <- full_join(Ndep_cumsum70, Sdep_change70)
+AtmosDep_70_nona <- na.omit(AtmosDep_70)
+
+# merge with CS plots
+# quick check on NAs in plot locations
+table(filter(plot_locations, is.na(E_6_FIG_100M))$E_4_FIG_1KM)
+table(filter(plot_locations, is.na(N_6_FIG_100M))$N_4_FIG_1KM)
+# if there is an NA in the 100m measurement can use the 1km measurement (1km
+# measurements has 0s if there are 100m measurements)
+plot_locs19 <- plot_locations %>%
+  filter(REP_ID %in% CS19_PL$REP_ID) %>%
+  mutate(YEAR = "y19", ID = NA, E_10_FIG_1M = NA, N_10_FIG_1M = NA,
+         REPEAT_PLOT_ID = NA, OS_8_FIG_10M = NA, OS_6_FIG_100M = NA) %>%
+  group_by(REP_ID) %>%
+  mutate(E_6_FIG_100M = mean(E_6_FIG_100M),
+         N_6_FIG_100M = mean(N_6_FIG_100M)) %>% ungroup() %>%
+  unique() 
+janitor::get_dupes(plot_locs19, REP_ID) #0 dupes
+
+CS_plot_atdep <- plot_locations %>% 
+  rbind(plot_locs19) %>%
+  mutate(plot_x = ifelse(!is.na(E_6_FIG_100M), E_6_FIG_100M, E_4_FIG_1KM),
+         plot_y = ifelse(!is.na(N_6_FIG_100M), N_6_FIG_100M, N_4_FIG_1KM)) %>%
+  select(plot_x, plot_y, REP_ID, Year = YEAR) %>%
+  mutate(Year = recode(Year, 
+                       "y19" = 2018,
+                       "y07" = 2007,
+                       "y9899" = 1998,
+                       "y90" = 1990,
+                       "y78" = 1978)) #%>%
+  # mutate(x = AtmosDep_70_nona$x[which.min(abs(AtmosDep_70_nona$x - plot_x))],
+  #        y = AtmosDep_70_nona$y[which.min(abs(AtmosDep_70_nona$y - plot_y))]) %>%
+  # full_join(AtmosDep_70_nona)
+
+dep_x <- AtmosDep_70_nona$x
+dep_y <- AtmosDep_70_nona$y
+
+for(i in 1:nrow(CS_plot_atdep)) {
+  CS_plot_atdep[i,"x"] <- dep_x[which.min(abs(dep_x - CS_plot_atdep$plot_x[i]))]
+  CS_plot_atdep[i,"y"] <- dep_y[which.min(abs(dep_y - CS_plot_atdep$plot_y[i]))]
+}
+
+CS_plot_atdep <- full_join(CS_plot_atdep, AtmosDep_70_nona)
+summary(CS_plot_atdep)

@@ -45,6 +45,15 @@ SPECIES_LIB_TRAITS <- fread("../../../CS/Data/SPECIES_LIB_TRAITS.csv")
 SPECIES_LIB_CODES <- fread("../../../CS/Data/SPECIES_LIB_CODES.csv")
 
 # Desktop
+# atmospheric deposition data
+Sdep_avg <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_gridavg_1970-2018_5km_kgS_ha.csv")
+Sdep_for <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_forest_1970-2018_5km_kgS_ha.csv")
+Sdep_moo <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_moor_1970-2018_5km_kgS_ha.csv")
+
+Ndep_avg <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_gridavg_1970-2018_5km_kgN_ha.csv")
+Ndep_for <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_forest_1970-2018_5km_kgN_ha.csv")
+Ndep_moo <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_moor_1970-2018_5km_kgN_ha.csv")
+
 library(RODBC)
 ## get data on species characteristics from CS database
 pwds <- read.csv("Outputs/pwd.csv")
@@ -86,6 +95,9 @@ CS07_PH <- sqlFetch(channel2, "DB_MASQ.CS2007_PH_LOI_DATA")
 CS78_PH <- sqlFetch(channel2, "DB_MASQ.CS1978_PH_LOI_DATA")
 CS98_PH <- sqlFetch(channel2, "DB_MASQ.CS1998_PH_LOI_DATA")
 UK19_PH <- read.csv("Outputs/UK19_PHLOI.csv")
+
+CS07_CN <- sqlFetch(channel2, "DB_MASQ.CS2007_CN_DATA")
+CS98_CN <- sqlFetch(channel2, "DB_MASQ.CS1998_CN_DATA")
 
 # tier 4 data
 CS_tier4 <- sqlFetch(channel2, "DB_MASQ.CS_SOILS_TIER_4_DATA")
