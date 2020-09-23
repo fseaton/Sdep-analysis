@@ -46,13 +46,13 @@ SPECIES_LIB_CODES <- fread("../../../CS/Data/SPECIES_LIB_CODES.csv")
 
 # Desktop
 # atmospheric deposition data
-Sdep_avg <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_gridavg_1970-2018_5km_kgS_ha.csv")
-Sdep_for <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_forest_1970-2018_5km_kgS_ha.csv")
-Sdep_moo <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_moor_1970-2018_5km_kgS_ha.csv")
+Sdep_avg <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_gridavg_1970-2018_5km_kgS_ha.csv")
+Sdep_for <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_forest_1970-2018_5km_kgS_ha.csv")
+Sdep_moo <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_moor_1970-2018_5km_kgS_ha.csv")
 
-Ndep_avg <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_gridavg_1970-2018_5km_kgN_ha.csv")
-Ndep_for <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_forest_1970-2018_5km_kgN_ha.csv")
-Ndep_moo <- fread("../UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_moor_1970-2018_5km_kgN_ha.csv")
+Ndep_avg <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_gridavg_1970-2018_5km_kgN_ha.csv")
+Ndep_for <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_forest_1970-2018_5km_kgN_ha.csv")
+Ndep_moo <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_moor_1970-2018_5km_kgN_ha.csv")
 
 library(RODBC)
 ## get data on species characteristics from CS database
@@ -72,13 +72,16 @@ GM16_IBD <- sqlFetch(channelg, "GMEP_DERIVED.WP6_IBD_YRS1234")
 # metadata
 SPECIES_LIB_TRAITS <- sqlFetch(channel3, "CSVEG.LUS_SP_LIB_AND_TRAITS")
 SPECIES_LIB_CODES <- sqlFetch(channel3, "CSVEG.LUS_SP_LIB_CODES_NEW")
+BHPH_NAMES <- sqlFetch(channel3, "CSVEG.BHPH_NAMES")
 
-# recent plant data
+# plant species records
 CS19_SP <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOT_SP_161819") 
 CS78_SP <- sqlFetch(channel3, "CSVEG.CS78_SPECIESDATA")
 CS90_SP <- sqlFetch(channel3, "CSVEG.CS90_SPECIESDATA")
 CS98_SP <- sqlFetch(channel3, "CSVEG.CS9899_SPECIESDATA")
 CS07_SP <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOT_SPECIES_2007")
+
+# plot records
 VEGETATION_PLOTS_20161819 <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOTS_20161819")
 CS07_PLOTS <- sqlFetch(channel3, "CSVEG.VEGETATION_PLOTS_2007")
 CS98_PLOTS <- sqlFetch(channel3, "CSVEG.CS9899_QUADS_DESCRIPTION")
@@ -109,3 +112,7 @@ sqlTables(channel, schema = "DB_CSSQUARES")
 landclass_dat <- sqlFetch(channel, "DB_CSSQUARES.SQUARES_FILE_ALL_LC")
 plot_locations <- sqlFetch(channel, "DB_CSSQUARES.SQUARE_AND_PLOT_LOCATIONS")
 plot_dates <- sqlFetch(channel, "DB_CSSQUARES.DATEVARS_78_84_90_98_07")
+
+# CEH laptop data
+UK19_WET <- read_excel("C:/Users/fseaton/Documents/CS/Copy of UKSCAPE Field Survey 2019 CHEMICAL DARv3.xls",
+                       sheet = "DATA", skip = 3, na = "NA")

@@ -958,7 +958,95 @@ get_prior(bf(pH ~ a*exp(b*Moisture) + c*exp(d*Moisture) + e,
              a + b + c + d + e ~1, nl = TRUE),
           data = MOISTURE_PH)
 
+# rainfall and soil moisture ####
+rain_moist <- cs_survey_rainfall %>% ungroup() %>%
+  mutate(Year = as.numeric(Year)) %>%
+  full_join(MOISTURE)
+summary(rain_moist)
+mice::md.pattern(rain_moist)
+rain_moist %>% filter(is.na(mean_rainfall)) %>% .$Year %>% table()
 
+ggplot(rain_moist, aes(x = mean_rainfall, y = Moisture)) + 
+  geom_point()
+
+rain_moist_hab <- left_join(rain_moist, BH_comb)
+summary(rain_moist_hab)
+ggplot(rain_moist_hab, aes(x = mean_rainfall, y = Moisture)) + 
+  geom_point() +
+  facet_wrap(~BH_DESC)
+
+# compare rainfall to sample and EO soil moisture
+rain_moist_hab <- left_join(rain_moist_hab, cs_loc_moist07_long)
+
+ggplot(rain_moist_hab, aes(x = mean_moisture, y = Moisture)) + 
+  geom_point(aes(colour = month))
+
+rain_moist_hab07 <- rain_moist_hab %>%
+  filter(Year == 2007) %>%
+  full_join(cs_loc_moist07_sample_month)
+ggplot(rain_moist_hab07, aes(x = eo_moisture, y = Moisture)) + 
+  geom_point(aes(colour = month))
+ggplot(rain_moist_hab07, aes(x = eo_moisture, y = mean_moisture)) + 
+  geom_point()
+ggplot(rain_moist_hab07, aes(x = mean_rainfall, y = Moisture)) + 
+  geom_point(aes(colour = eo_moisture))
+
+rain_moist_hab07 <- left_join(rain_moist_hab07, cs_loc07_temp)
+ggplot(rain_moist_hab07, aes(x = eo_moisture, y = Moisture)) + 
+  geom_point(aes(colour = N_10_FIG_1M))
+p1_eo <- ggplot(rain_moist_hab07, aes(x = E_10_FIG_1M, y = N_10_FIG_1M)) + 
+  geom_point(aes(colour = eo_moisture)) +
+  coord_fixed()
+p2_meas <- ggplot(filter(rain_moist_hab07, !is.na(Moisture)),
+                  aes(x = E_10_FIG_1M, y = N_10_FIG_1M)) + 
+  geom_point(aes(colour = Moisture)) +
+  coord_fixed()
+p3_rain <- ggplot(filter(rain_moist_hab07, !is.na(mean_rainfall)),
+                  aes(x = E_10_FIG_1M, y = N_10_FIG_1M)) + 
+  geom_point(aes(colour = mean_rainfall)) +
+  coord_fixed()
+
+p1_eo + p2_meas + p3_rain
+
+p1_eo <- ggplot(rain_moist_hab07, aes(x = eo_moisture)) +
+  geom_histogram(bins = 40)
+p2_meas <- ggplot(rain_moist_hab07, aes(x = Moisture)) +
+  geom_histogram(bins = 40)
+p3_rain <- ggplot(rain_moist_hab07, aes(x = mean_rainfall)) +
+  geom_histogram(bins = 40)
+
+p1_eo + p2_meas + p3_rain
+
+psych::pairs.panels(select(rain_moist_hab07, eo_moisture, Moisture,
+                           mean_rainfall), rug=FALSE)
+
+summary(lm(Moisture ~ eo_moisture + mean_rainfall, data = rain_moist_hab07))
+
+summary(lm(Moisture ~ mean_moisture + mean_rainfall, data = rain_moist_hab07))
+
+ggplot(PH_moisture,
+       aes(x = mean_moisture, y = PH_2007)) + 
+  geom_point()
+
+ggplot(PH_moisture,
+       aes(x = Moisture, y = PH_2007)) + 
+  geom_point()
+
+summary(lm(Moisture ~ mean_moisture + mean_rainfall, data = rain_moist_hab07))
+
+
+PH_moisture <- left_join(PH_moisture,
+                         select(CS07_CN, REP_ID = REP_ID07,
+                                C_PERCENT, N_PERCENT))
+summary(lm(PH_2007 ~ log(C_PERCENT) + eo_moisture, 
+           data = PH_moisture))
+summary(lm(PHC_2007 ~ Moisture + log(C_PERCENT), 
+           data = PH_moisture))
+
+ggplot(PH_moisture,
+       aes(x = C_PERCENT, y = PH_2007)) + 
+  geom_point() +
+  scale_x_log10()
 
 # pH and atmospheric deposition ####
 ph_atdep <- PH %>% select(REP_ID, diff7807) %>%
@@ -968,20 +1056,37 @@ ph_atdep <- PH %>% select(REP_ID, diff7807) %>%
 ggplot(ph_atdep, aes(x = Sdep, y = diff7807))+ 
   geom_point()
 
-ph_atdep <- PH %>% select(REP_ID, diff7819) %>%
+ph_atdep <- PH %>% 
+  select(REP_ID, diff7819) %>%
+  na.omit() %>%
   mutate(Year = 2018) %>%
   left_join(CS_plot_atdep)
 
 ggplot(ph_atdep, aes(x = Sdep, y = diff7819))+ 
   geom_point()
 
-ph_atdep <- PH %>% select(REP_ID, PH_2007) %>%
+ph_atdep <- PH %>% 
+  mutate(diffc0719 = PHC_2019 - PHC_2007) %>%
+  select(REP_ID, diff0719, diffc0719) %>%
+  filter(!is.na(diff0719)) %>%
+  mutate(Year = 2018) %>%
+  left_join(CS_plot_atdep)
+
+ggplot(ph_atdep, aes(x = Sdep, y = diff0719))+ 
+  geom_point()
+ggplot(ph_atdep, aes(x = Sdep, y = diffc0719))+ 
+  geom_point()
+
+
+ph_atdep <- PH %>% select(REP_ID, PH_2007, PHC_2007) %>%
   mutate(Year = 2007) %>%
   left_join(CS_plot_atdep)
 
 ggplot(ph_atdep, aes(x = Sdep, y = PH_2007))+ 
   geom_point()
 
+ggplot(ph_atdep, aes(x = Sdep, y = PHC_2007))+ 
+  geom_point()
 
 # soil N against N deposition
 summary(CS07_CN)

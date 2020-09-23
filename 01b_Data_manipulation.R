@@ -35,6 +35,27 @@ hab <- full_join(hab07, hab98) %>%
                            `7` = "Moorland grass/mosaic",
                            `8` = "Heath/bog"))
 
+# Broad habitat data ####
+BH_comb <- do.call(rbind,
+                   list(mutate(select(VEGETATION_PLOTS_20161819, 
+                                      REP_ID, BH = BH_PLOT),
+                               Year = 2019),
+                        mutate(select(CS07_IBD, 
+                                      REP_ID = REP_ID07, BH = BH07),
+                               Year = 2007),
+                        mutate(select(CS98_IBD, 
+                                      REP_ID = REP_ID98, BH = BH98),
+                               Year = 1998),
+                        mutate(select(CS90_IBD, 
+                                      REP_ID = REP_ID90, BH = BH90),
+                               Year = 1990),
+                        mutate(select(CS78_IBD, 
+                                      REP_ID = REP_ID78, BH = BH78),
+                               Year = 1978))) %>%
+  left_join(unique(select(BHPH_NAMES, BH = BH_CODE,
+                          BH_DESC = BROAD_HABITAT)))
+
+
 # Ellenberg scores ####
 str(CS19_SP)
 table(CS19_SP$PLOT_TYPE)
@@ -422,9 +443,49 @@ PH_Diff_wide <- select(PH, REP_ID, diff0718) %>%
   left_join(select(CS07_PLOTS, REP_ID, POINT_X, POINT_Y))
 
 
+# LOI ####
+LOI <- full_join(select(CS78_PH, REP_ID, LOI_1978 = LOI1978),
+                select(CS98_PH, REP_ID, LOI_1998 = LOI2000)) %>%
+  full_join(select(CS07_PH, REP_ID, LOI_2007 = LOI2007)) %>%
+  full_join(select(UK19_PH, REP_ID, LOI_2019 = LOI)) %>%
+  mutate(LOI_2019 = 100*LOI_2019)
+str(LOI)
+summary(LOI)
+
+# long format pH
+LOI_long <- pivot_longer(LOI, starts_with("LOI"),
+                        values_to = "LOI",
+                        values_drop_na = TRUE,
+                        names_to = "Year",
+                        names_prefix = "LOI_",
+                        names_transform = list(Year = as.integer)) 
+LOI_long
+
+
+# Soil moisture ####
+UK19_WET <- UK19_WET %>%
+  mutate(REP_ID = paste0(`Square number...1`,`X plot...2`)) %>%
+  select(-starts_with("Square")) %>%
+  select(-starts_with("X "))
+
+MOISTURE <- CS_tier4 %>%
+  mutate(REP_ID = ifelse(!is.na(REP_ID07), REP_ID07,
+                         ifelse(!is.na(REP_ID98), REP_ID98,
+                                ifelse(!is.na(REP_ID78), REP_ID78, NA)))) %>%
+  select(REP_ID, MOISTURE_CONTENT_07, MOISTURE_CONTENT_98) %>%
+  full_join(select(UK19_WET, REP_ID, MOISTURE_CONTENT_19 = `g water/wet weight of soil`)) %>%
+  # mutate(VWC_19 = 100*VWC_19) %>%
+  pivot_longer(starts_with("MOISTURE"), names_to = "variable", 
+               values_to = "Moisture") %>%
+  mutate(Year = ifelse(variable == "MOISTURE_CONTENT_07", 2007,
+                       ifelse(variable == "MOISTURE_CONTENT_98", 1998,
+                              ifelse(variable == "MOISTURE_CONTENT_19", 2019, NA)))) %>%
+  select(-variable) %>% na.omit()
+
+
 # Spatial data manipulation ####
-# rainfall - monthly totals
-rain07 <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_200701-200712.nc"
+# rainfall - monthly totals ####
+rain07 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_200701-200712.nc"
 rain <- raster::brick(rain07)
 
 cs_loc07 <- plot_locations %>%
@@ -462,8 +523,26 @@ cs_loc_rain07_long <- cs_loc_rain07_long %>%
 
 
 # 1998
-rain98 <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_199801-199812.nc"
+rain98 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_199801-199812.nc"
 rain <- raster::brick(rain98)
+
+# check to see plots and rasters align
+cs_loc98_wgs <- plot_locations %>%
+  filter(YEAR == "y9899") %>% 
+  mutate(EAST = ifelse(!is.na(E_6_FIG_100M),E_6_FIG_100M, E_4_FIG_1KM),
+         NORTH = ifelse(!is.na(N_6_FIG_100M),N_6_FIG_100M, N_4_FIG_1KM)) %>% 
+  select(SERIES_NUM, EAST, NORTH) %>%
+  group_by(SERIES_NUM) %>%
+  summarise(EAST = mean(EAST), NORTH = mean(NORTH)) %>%
+  ungroup() %>%
+  mutate(EAST= round(EAST, -3), NORTH = round(NORTH, -3)) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("EAST","NORTH"), crs = 27700) %>%
+  st_transform(4326)
+leaflet() %>% addTiles() %>% 
+  addRasterImage(rain_june, opacity = 0.5) %>% 
+  addMarkers(data=cs_loc98_wgs, 
+             label = cs_loc98_wgs$SERIES_NUM)
 
 cs_loc98 <- plot_locations %>%
   filter(YEAR == "y9899") %>%
@@ -491,7 +570,7 @@ cs_loc_rain98_long <- cs_loc_rain98 %>%
             sum_rainfall = sum(rainfall))
 
 # 1990
-rain90 <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_199001-199012.nc"
+rain90 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_199001-199012.nc"
 rain <- raster::brick(rain90)
 
 cs_loc90 <- plot_locations %>%
@@ -521,7 +600,7 @@ cs_loc_rain90_long <- cs_loc_rain90 %>%
 
 
 # 1978
-rain78 <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_197801-197812.nc"
+rain78 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_197801-197812.nc"
 rain <- raster::brick(rain78)
 
 cs_loc78 <- plot_locations %>%
@@ -584,12 +663,23 @@ ggsave("Average monthly rainfall for 4 months pre-survey.png",
 
 # Climatic averages
 str(plot_locations)
+CS19_locs <- plot_locations %>%
+  filter(REP_ID %in% VEGETATION_PLOTS_20161819$REP_ID) %>%
+  mutate(YEAR = "y19") %>%
+  group_by(REP_ID, YEAR, SERIES_NUM) %>%
+  summarise_if(is.numeric, mean) %>%
+  mutate(ID = NA, REPEAT_PLOT_ID = NA, OS_8_FIG_10M = NA,
+         OS_6_FIG_100M = NA, OS_4_FIG_1KM = NA,OS_2_FIG_10KM = NA,) %>%
+  select(all_of(colnames(plot_locations)))
 allplot_loc <- plot_locations %>%
-  select(REP_ID, YEAR, E_10_FIG_1M, N_10_FIG_1M) %>%
+  rbind(CS19_locs) %>%
+  mutate(plot_x = ifelse(!is.na(E_6_FIG_100M), E_6_FIG_100M, E_4_FIG_1KM),
+         plot_y = ifelse(!is.na(N_6_FIG_100M), N_6_FIG_100M, N_4_FIG_1KM)) %>%
+  select(REP_ID, YEAR, plot_x, plot_y) %>%
   na.omit() %>%
-  st_as_sf(coords = c("E_10_FIG_1M","N_10_FIG_1M"), crs = 27700)
+  st_as_sf(coords = c("plot_x","plot_y"), crs = 27700)
 
-clim_rain <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_ann-30y_198101-201012.nc"
+clim_rain <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_ann-30y_198101-201012.nc"
 rain <- raster::brick(clim_rain)
 cs_loc_rain30y <- raster::extract(rain, allplot_loc)
 colnames(cs_loc_rain30y) <- "RAIN_8110"
@@ -598,12 +688,13 @@ cs_loc_rain30y <- cs_loc_rain30y %>%
   select(-geometry) %>%
   mutate(RAIN_8110 = ifelse(RAIN_8110 < 9e20, RAIN_8110, NA),
          Year = recode(YEAR,
+                       "y19" = 2019,
                        "y07" = 2007,
                        "y9899" = 1998,
                        "y90" = 1990,
                        "y78" = 1978))
 
-sum_rain <- "../Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_seas-30y_198101-201012.nc"
+sum_rain <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_seas-30y_198101-201012.nc"
 rain <- raster::brick(sum_rain)
 cs_loc_sumrain30y <- raster::extract(rain, allplot_loc)
 colnames(cs_loc_sumrain30y) <- c("WIN","SPR","SUM","AUT")
@@ -612,10 +703,63 @@ cs_loc_sumrain30y <- cs_loc_sumrain30y %>%
   select(-geometry) %>%
   mutate(across(WIN:AUT, function(x) ifelse(x < 9e20,x, NA)),
          Year = recode(YEAR,
+                       "y19" = 2019,
                        "y07" = 2007,
                        "y9899" = 1998,
                        "y90" = 1990,
                        "y78" = 1978))
+
+cs_rainfall_stats <- full_join(cs_loc_rain30y, cs_loc_sumrain30y) %>%
+  full_join(mutate(ungroup(cs_survey_rainfall), Year = as.numeric(Year))) %>%
+  mutate(rain_diff = mean_rainfall - SUM/3) %>%
+  select(REP_ID, Year, AVER_RAIN_8110 = RAIN_8110, rain_diff)
+
+
+# CHESS soil moisture ####
+nc <- ncdf4::nc_open("~/Shapefiles/CHESS/CHESSLandMonHydEn2007.nc")
+nc
+soil_moist <- ncdf4::ncvar_get(nc, attributes(nc$var)$names[25])
+easting <- ncdf4::ncvar_get(nc, "eastings")
+northing <- ncdf4::ncvar_get(nc, "northings")
+# take top layer of soil only
+soil_moist <- soil_moist[,1,] %>% cbind(easting, northing) 
+colnames(soil_moist) <- c(month.abb, "easting","northing")
+moist_crs <- "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +towgs84=446.448,-125.157,542.06,0.15,0.247,0.842,-20.489 +units=m +no_defs"
+
+soil_moist <- as.data.frame(soil_moist)
+moist <- st_as_sf(soil_moist, coords = c("easting","northing"), crs = 27700)
+
+cs_loc_moist <- st_nearest_feature(cs_loc07, moist)
+cs_loc_moist <- as.data.frame(soil_moist)[cs_loc_moist,1:12]
+rownames(cs_loc_moist) <- cs_loc07$REP_ID
+colnames(cs_loc_moist) <- paste0("X_",1:12)
+
+cs_loc_moist07_long <- cs_loc_moist %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("REP_ID") %>%
+  pivot_longer(starts_with("X_"), names_to = "Month",
+               values_to = "moisture", names_prefix = "X_") %>%
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
+         Year = 2007, Month = as.numeric(Month)) %>%
+  left_join(select(sample_date, SERIES_NUM, DATE = MID__DATE07)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
+  filter(field_season == 1) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(mean_moisture = mean(moisture), month = max(Month))
+
+cs_loc_moist07_sample_month <- cs_loc_moist %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("REP_ID") %>%
+  pivot_longer(starts_with("X_"), names_to = "Month",
+               values_to = "moisture", names_prefix = "X_") %>%
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
+         Year = 2007, Month = as.numeric(Month)) %>%
+  left_join(select(sample_date, SERIES_NUM, DATE = MID__DATE07)) %>%
+  filter(Month == DATE) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(eo_moisture = mean(moisture))
+
+
 
 
 # Atmospheric deposition data ####
@@ -732,7 +876,7 @@ table(filter(plot_locations, is.na(N_6_FIG_100M))$N_4_FIG_1KM)
 # if there is an NA in the 100m measurement can use the 1km measurement (1km
 # measurements has 0s if there are 100m measurements)
 plot_locs19 <- plot_locations %>%
-  filter(REP_ID %in% CS19_PL$REP_ID) %>%
+  filter(REP_ID %in% VEGETATION_PLOTS_20161819$REP_ID) %>%
   mutate(YEAR = "y19", ID = NA, E_10_FIG_1M = NA, N_10_FIG_1M = NA,
          REPEAT_PLOT_ID = NA, OS_8_FIG_10M = NA, OS_6_FIG_100M = NA) %>%
   group_by(REP_ID) %>%
@@ -741,6 +885,21 @@ plot_locs19 <- plot_locations %>%
   unique() 
 janitor::get_dupes(plot_locs19, REP_ID) #0 dupes
 
+# get habitat information for every plot - if no info use gridavg
+CS_habs <- BH_comb %>% 
+  mutate(Habitat = ifelse(BH %in% c(1,2), "forest", "moor")) %>%
+  mutate(Habitat = replace_na(Habitat, "gridavg")) %>% 
+  select(REP_ID, Year, Habitat) %>%
+  unique()
+CS_habs_dupes <- get_dupes(CS_habs, REP_ID, Year) %>%
+  filter(Habitat == "forest") %>% select(-dupe_count)
+CS_habs <- CS_habs %>%
+  filter(!paste0(REP_ID, Year) %in% 
+           paste0(CS_habs_dupes$REP_ID, CS_habs_dupes$Year)) %>%
+  rbind(CS_habs_dupes)
+get_dupes(CS_habs, REP_ID, Year)
+
+# get locations of every plot
 CS_plot_atdep <- plot_locations %>% 
   rbind(plot_locs19) %>%
   mutate(plot_x = ifelse(!is.na(E_6_FIG_100M), E_6_FIG_100M, E_4_FIG_1KM),
@@ -751,11 +910,11 @@ CS_plot_atdep <- plot_locations %>%
                        "y07" = 2007,
                        "y9899" = 1998,
                        "y90" = 1990,
-                       "y78" = 1978)) #%>%
-  # mutate(x = AtmosDep_70_nona$x[which.min(abs(AtmosDep_70_nona$x - plot_x))],
-  #        y = AtmosDep_70_nona$y[which.min(abs(AtmosDep_70_nona$y - plot_y))]) %>%
-  # full_join(AtmosDep_70_nona)
+                       "y78" = 1978)) %>%
+  left_join(CS_habs) %>%
+  mutate(Habitat = replace_na(Habitat, "gridavg"))
 
+# match to atmospheric deposition data
 dep_x <- AtmosDep_70_nona$x
 dep_y <- AtmosDep_70_nona$y
 
@@ -764,5 +923,5 @@ for(i in 1:nrow(CS_plot_atdep)) {
   CS_plot_atdep[i,"y"] <- dep_y[which.min(abs(dep_y - CS_plot_atdep$plot_y[i]))]
 }
 
-CS_plot_atdep <- full_join(CS_plot_atdep, AtmosDep_70_nona)
+CS_plot_atdep <- left_join(CS_plot_atdep, AtmosDep_70_nona)
 summary(CS_plot_atdep)
