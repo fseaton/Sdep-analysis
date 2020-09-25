@@ -55,6 +55,13 @@ BH_comb <- do.call(rbind,
   left_join(unique(select(BHPH_NAMES, BH = BH_CODE,
                           BH_DESC = BROAD_HABITAT)))
 
+BH_comb_nodupes <- BH_comb %>%
+  group_by(REP_ID, Year) %>%
+  summarise(BH = min(BH), .groups = "drop") %>%
+  left_join(unique(select(BHPH_NAMES, BH = BH_CODE,
+                          BH_DESC = BROAD_HABITAT)))
+  
+
 
 # Ellenberg scores ####
 str(CS19_SP)
@@ -487,6 +494,7 @@ MOISTURE <- CS_tier4 %>%
 # rainfall - monthly totals ####
 rain07 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_200701-200712.nc"
 rain <- raster::brick(rain07)
+rain[rain > 9e20] <- NA
 
 cs_loc07 <- plot_locations %>%
   filter(YEAR == "y07") %>%
@@ -496,7 +504,17 @@ cs_loc07 <- plot_locations %>%
 
 cs_loc_rain <- raster::extract(rain, cs_loc07)
 rownames(cs_loc_rain) <- cs_loc07$REP_ID
+# for reps that don't fall in the raster get average of all values within 2000m
+cs_loc07_na <- cs_loc07 %>%
+  filter(REP_ID %in% rownames(cs_loc_rain)[is.na(cs_loc_rain[,1])])
+cs_loc_rain_na <- raster::extract(rain, cs_loc07_na,
+                                  fun = mean, buffer = 2000)
+rownames(cs_loc_rain_na) <- cs_loc07_na$REP_ID
+cs_loc_rain <- rbind(na.omit(cs_loc_rain),
+                     cs_loc_rain_na)
 colnames(cs_loc_rain) <- paste("X",c(1:12), "2007", sep = "_")
+
+
 cs_loc_rain07_long <- cs_loc_rain %>%
   as.data.frame() %>%
   tibble::rownames_to_column("REP_ID") %>%
@@ -514,17 +532,20 @@ sample_date <- plot_dates %>%
 
 cs_loc_rain07_long <- cs_loc_rain07_long %>%
   left_join(select(sample_date, SERIES_NUM, DATE = MID__DATE07)) %>%
-  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
+  mutate(DATE = ifelse(!is.na(DATE), DATE, 
+                       round(mean(DATE, na.rm = TRUE))+1),
+         Month = as.numeric(Month)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month > DATE - 4, 1,0)) %>%
   filter(field_season == 1) %>%
   group_by(Year, REP_ID) %>%
   summarise(mean_rainfall = mean(rainfall),
-            sum_rainfall = sum(rainfall))
-
+            sum_rainfall = sum(rainfall)) 
 
 
 # 1998
 rain98 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_199801-199812.nc"
 rain <- raster::brick(rain98)
+rain[rain > 9e20] <- NA
 
 # check to see plots and rasters align
 cs_loc98_wgs <- plot_locations %>%
@@ -552,6 +573,14 @@ cs_loc98 <- plot_locations %>%
 
 cs_loc_rain98 <- raster::extract(rain, cs_loc98)
 rownames(cs_loc_rain98) <- cs_loc98$REP_ID
+# for reps that don't fall in the raster get average of all values within 2000m
+cs_loc98_na <- cs_loc98 %>%
+  filter(REP_ID %in% rownames(cs_loc_rain)[is.na(cs_loc_rain[,1])])
+cs_loc_rain_na <- raster::extract(rain, cs_loc98_na,
+                                  fun = mean, buffer = 2000)
+rownames(cs_loc_rain_na) <- cs_loc98_na$REP_ID
+cs_loc_rain <- rbind(na.omit(cs_loc_rain),
+                     cs_loc_rain_na)
 colnames(cs_loc_rain98) <- paste("X",c(1:12), "1998", sep = "_")
 
 cs_loc_rain98_long <- cs_loc_rain98 %>%
@@ -563,6 +592,9 @@ cs_loc_rain98_long <- cs_loc_rain98 %>%
   mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
          rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
   left_join(select(sample_date, SERIES_NUM, DATE = MID_DATE98)) %>%
+  mutate(DATE = ifelse(!is.na(DATE), DATE, 
+                       round(mean(DATE, na.rm = TRUE))+1),
+         Month = as.numeric(Month)) %>%
   mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
   filter(field_season == 1) %>%
   group_by(Year, REP_ID) %>%
@@ -572,6 +604,7 @@ cs_loc_rain98_long <- cs_loc_rain98 %>%
 # 1990
 rain90 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_199001-199012.nc"
 rain <- raster::brick(rain90)
+rain[rain > 9e20] <- NA
 
 cs_loc90 <- plot_locations %>%
   filter(YEAR == "y90") %>%
@@ -581,6 +614,14 @@ cs_loc90 <- plot_locations %>%
 
 cs_loc_rain90 <- raster::extract(rain, cs_loc90)
 rownames(cs_loc_rain90) <- cs_loc90$REP_ID
+# for reps that don't fall in the raster get average of all values within 2000m
+cs_loc90_na <- cs_loc90 %>%
+  filter(REP_ID %in% rownames(cs_loc_rain)[is.na(cs_loc_rain[,1])])
+cs_loc_rain_na <- raster::extract(rain, cs_loc90_na,
+                                  fun = mean, buffer = 2000)
+rownames(cs_loc_rain_na) <- cs_loc90_na$REP_ID
+cs_loc_rain <- rbind(na.omit(cs_loc_rain),
+                     cs_loc_rain_na)
 colnames(cs_loc_rain90) <- paste("X",c(1:12), "1990", sep = "_")
 
 cs_loc_rain90_long <- cs_loc_rain90 %>%
@@ -592,6 +633,9 @@ cs_loc_rain90_long <- cs_loc_rain90 %>%
   mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
          rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
   left_join(select(sample_date, SERIES_NUM, DATE = MID_DATE90)) %>%
+  mutate(DATE = ifelse(!is.na(DATE), DATE, 
+                       round(mean(DATE, na.rm = TRUE))+1),
+         Month = as.numeric(Month)) %>%
   mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
   filter(field_season == 1) %>%
   group_by(Year, REP_ID) %>%
@@ -602,6 +646,7 @@ cs_loc_rain90_long <- cs_loc_rain90 %>%
 # 1978
 rain78 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_197801-197812.nc"
 rain <- raster::brick(rain78)
+rain[rain > 9e20] <- NA
 
 cs_loc78 <- plot_locations %>%
   filter(YEAR == "y78") %>%
@@ -611,6 +656,14 @@ cs_loc78 <- plot_locations %>%
 
 cs_loc_rain78 <- raster::extract(rain, cs_loc78)
 rownames(cs_loc_rain78) <- cs_loc78$REP_ID
+# for reps that don't fall in the raster get average of all values within 2000m
+cs_loc78_na <- cs_loc78 %>%
+  filter(REP_ID %in% rownames(cs_loc_rain)[is.na(cs_loc_rain[,1])])
+cs_loc_rain_na <- raster::extract(rain, cs_loc78_na,
+                                  fun = mean, buffer = 2000)
+rownames(cs_loc_rain_na) <- cs_loc78_na$REP_ID
+cs_loc_rain <- rbind(na.omit(cs_loc_rain),
+                     cs_loc_rain_na)
 colnames(cs_loc_rain78) <- paste("X",c(1:12), "1978", sep = "_")
 
 cs_loc_rain78_long <- cs_loc_rain78 %>%
@@ -622,6 +675,9 @@ cs_loc_rain78_long <- cs_loc_rain78 %>%
   mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
          rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
   left_join(select(sample_date, SERIES_NUM, DATE = MID_DATE78)) %>%
+  mutate(DATE = ifelse(!is.na(DATE), DATE, 
+                       round(mean(DATE, na.rm = TRUE))+1),
+         Month = as.numeric(Month)) %>%
   mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
   filter(field_season == 1) %>%
   group_by(Year, REP_ID) %>%
@@ -714,6 +770,27 @@ cs_rainfall_stats <- full_join(cs_loc_rain30y, cs_loc_sumrain30y) %>%
   mutate(rain_diff = mean_rainfall - SUM/3) %>%
   select(REP_ID, Year, AVER_RAIN_8110 = RAIN_8110, rain_diff)
 
+cs_rainfall_diff <- cs_survey_rainfall %>% ungroup() %>%
+  na.omit() %>% filter(Year != 1990) %>%
+  filter(grepl("X", REP_ID)) %>%
+  select(Year:mean_rainfall) %>%
+  pivot_wider(id_cols = REP_ID, names_from = Year, 
+              values_from = mean_rainfall,
+              names_prefix = "rain") %>%
+  mutate(diff7898 = rain1998 - rain1978,
+         diff9807 = rain2007 - rain1998) %>%
+  select(REP_ID, contains("diff")) %>%
+  pivot_longer(contains("diff"), values_to = "fieldseason_rain",
+               names_to = "Time_period", names_prefix = "diff") %>%
+  mutate(Year = recode(Time_period,
+                       "7898" = 1998,
+                       "9807" = 2007)) %>%
+  filter(grepl("X", REP_ID))
+
+cs_rainfall_averages <-
+  full_join(select(cs_loc_rain30y, REP_ID, Year, AVER_RAIN = RAIN_8110),
+            select(cs_loc_sumrain30y, REP_ID, Year, AVER_SUM_RAIN = SUM))
+  
 
 # CHESS soil moisture ####
 nc <- ncdf4::nc_open("~/Shapefiles/CHESS/CHESSLandMonHydEn2007.nc")
@@ -891,13 +968,13 @@ CS_habs <- BH_comb %>%
   mutate(Habitat = replace_na(Habitat, "gridavg")) %>% 
   select(REP_ID, Year, Habitat) %>%
   unique()
-CS_habs_dupes <- get_dupes(CS_habs, REP_ID, Year) %>%
+CS_habs_dupes <- janitor::get_dupes(CS_habs, REP_ID, Year) %>%
   filter(Habitat == "forest") %>% select(-dupe_count)
 CS_habs <- CS_habs %>%
   filter(!paste0(REP_ID, Year) %in% 
            paste0(CS_habs_dupes$REP_ID, CS_habs_dupes$Year)) %>%
   rbind(CS_habs_dupes)
-get_dupes(CS_habs, REP_ID, Year)
+janitor::get_dupes(CS_habs, REP_ID, Year)
 
 # get locations of every plot
 CS_plot_atdep <- plot_locations %>% 
