@@ -206,8 +206,23 @@ mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = WH_R_W) %>%
+  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
   select(REP_ID, SQUARE, YRnm, Ell, PH) %>%
   na.omit()
+
+# normal model response - to show not great
+get_prior(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+          data = mod_data)
+
+mod_pr <- c(prior(normal(0,0.5), class = "b"),
+            prior(normal(0,0.25), class = "Intercept"),
+            prior(normal(0.4,0.2), class = "ar"),
+            prior(student_t(3,0,1), class = "sd"),
+            prior(student_t(3,0,1), class = "sigma"))
+normal_mod <- brm(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+                  data = mod_data, prior = mod_pr,
+                  cores = 6, iter = 5000)
+pp_check(test_mod, nsamples = 50) + scale_x_continuous(limits =c(-5,5))
 
 # prior checks
 get_prior(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
@@ -234,7 +249,7 @@ ell_ph_diff <- brm(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
                    cores = 6, iter = 5000, 
                    file = "Outputs/Models/Difference/EllR_WHW_PH")
 summary(ell_ph_diff)
-plot(ell_ph_diff)
+plot(ell_ph_diff, plot = FALSE)
 pp_check(ell_ph_diff)
 
 # unweighted ellenberg r whole plot
@@ -242,13 +257,14 @@ mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = WH_R_UW) %>%
+  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
   select(REP_ID, SQUARE, YRnm, Ell, PH) %>%
   na.omit() 
 ell_ph_diffuw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
                         file = "Outputs/Models/Difference/EllR_WHUW_PH",
                         control = list(adapt_delta = 0.95))
 summary(ell_ph_diffuw)
-plot(ell_ph_diffuw)
+plot(ell_ph_diffuw, plot = FALSE)
 pp_check(ell_ph_diffuw)
 
 
@@ -257,13 +273,14 @@ mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = SM_R_W) %>%
+  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
   select(REP_ID, SQUARE, YRnm, Ell, PH) %>%
   na.omit() 
 ell_ph_diffsmw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
                          file = "Outputs/Models/Difference/EllR_SMW_PH",
                          control = list(adapt_delta = 0.95))
 summary(ell_ph_diffsmw)
-plot(ell_ph_diffsmw)
+plot(ell_ph_diffsmw, plot = FALSE)
 pp_check(ell_ph_diffsmw)
 
 # weighted ellenberg r small plot
@@ -271,12 +288,14 @@ mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = SM_R_UW) %>%
+  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
   select(REP_ID, SQUARE, YRnm, Ell, PH) %>%
   na.omit() 
 ell_ph_diffsmuw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
+                          control = list(adapt_delta = 0.95),
                           file = "Outputs/Models/Difference/EllR_SMUW_PH")
 summary(ell_ph_diffsmuw)
-plot(ell_ph_diffsmuw)
+plot(ell_ph_diffsmuw, plot = FALSE)
 pp_check(ell_ph_diffsmuw)
 
 
@@ -310,6 +329,7 @@ ggsave("pH effect on Ellenberg R score versions.png",
 mod_data <- ELL_pH %>%
   mutate(SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = WH_R_W) %>%
+  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
   select(REP_ID, SQUARE, Ell, PH, PHC) %>%
   na.omit()
 
@@ -350,6 +370,7 @@ mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = WH_R_UW) %>%
+  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
   select(REP_ID, SQUARE, YRnm, Ell, PH, PHC) %>%
   na.omit()
 ell_ph_diffuw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
@@ -378,6 +399,7 @@ mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = SM_R_W) %>%
+  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
   select(REP_ID, SQUARE, YRnm, Ell, PH, PHC) %>%
   na.omit()
 ell_ph_diffsmw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
@@ -406,6 +428,7 @@ mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = SM_R_UW) %>%
+  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
   select(REP_ID, SQUARE, YRnm, Ell, PH, PHC) %>%
   na.omit()
 ell_ph_diffsmuw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
@@ -482,6 +505,7 @@ mod_data <- ELL_pH_7807 %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = WH_R_W) %>%
+  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
   select(REP_ID, SQUARE, YRnm, Ell, Sdep,fieldseason_rain, Year1_pH, PH) %>%
   mutate(Sdep = as.numeric(scale(Sdep)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
