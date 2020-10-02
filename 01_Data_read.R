@@ -111,6 +111,20 @@ UK19_PH <- read.csv("Outputs/UK19_PHLOI.csv")
 CS07_CN <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS2007_CN_DATA"))
 CS98_CN <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS1998_CN_DATA"))
 
+# pH QA data
+CS78_PH_QA <- read.csv("Outputs/W1971_remeasurement_pH.csv")
+# CS98_PH_QA <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS1998_PH_REANALYSED_DATA"))
+CS98_PH_QA <- read_excel("Outputs/Copy of Archive CS2000 soils pH remeasurements.xls",
+                         sheet = "For database")
+colnames(CS98_PH_QA) <- c("SQUARE_NUM", "PLOT_TYPE", "REP_NUM","PH_DIW_QA",
+                          "PH_CACL2_QA")
+CS07_PH_QA <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS2007_PH_LOI_QA_DUPLICATES"))
+UK19_PH_QA <- read_excel("Outputs/UKSCAPE Field Survey 2019 CHEMICAL DARv5.xls",
+                         sheet = "pH and EC", skip = 9, na = c("","NA"))
+colnames(UK19_PH_QA) <- c("SQUARE","X_PLOT","PH_DIW","PH_CACL2",
+                          "EC","blank","rep_blank","PH_DIW_QA",
+                          "PH_CACL2_QA","EC_QA")
+
 # tier 4 data
 CS_tier4 <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS_SOILS_TIER_4_DATA"))
 
