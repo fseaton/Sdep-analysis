@@ -5,6 +5,41 @@ library(ggplot2)
 library(patchwork)
 library(sf)
 
+# Repeat plot identification ####
+# first set up pH REP_IDs
+UK19_PH <- UK19_PH %>%
+  mutate(REP_ID = paste(SQUARE_NUM,REP_NUM, sep = "X")) %>%
+  mutate(REP_ID = recode(REP_ID,
+                         "546X3" = "546X6",
+                         "546X4" = "546X7",
+                         "776X5" = "776X6",
+                         "828X8" = "828X7",
+                         "861X4" = "861X6",
+                         "878X2" = "878X6",
+                         "983X2" = "983X6",
+                         "1056X3" = "1056X6"))
+
+
+CS78_PH$REP_ID <- paste(CS78_PH$SQUARE_NUM,CS78_PH$REP_NUM, sep = "X")
+CS98_PH$REP_ID <- paste(CS98_PH$SQUARE_NUM,CS98_PH$REP_NUM, sep = "X")
+CS07_PH$REP_ID <- paste(CS07_PH$SQUARE_NUM,CS07_PH$REP_NUM, sep = "X")
+CS16_PH$REP_ID <- paste(CS16_PH$SQUARE_NUM,CS16_PH$REP_NUM, sep = "X")
+
+# now correct repeat plots for 2019 data and missing soils plots
+CS_REP_ID <- filter(CS_REPEAT_PLOTS, AMALG_PTYPE == "X") %>%
+  mutate(Y19 = ifelse(!is.na(Y07), Y07,
+                      ifelse(!is.na(Y9899), Y9899,
+                             ifelse(!is.na(Y90), Y90,
+                                    Y78))),
+         Y78 = ifelse(is.na(Y78) & !Y78 %in% CS78_PH$REP_ID & Y90 %in% CS78_PH$REP_ID, 
+                      Y90, 
+                      ifelse(!Y78 %in% CS78_PH$REP_ID & Y9899 %in% CS78_PH$REP_ID, Y9899, Y78)),
+         Y9899 = ifelse(is.na(Y9899) & !Y9899 %in% CS98_PH$REP_ID & Y90 %in% CS98_PH$REP_ID, 
+                              Y90, Y9899)) %>%
+  mutate(Y07 = ifelse(is.na(Y07) & !Y07 %in% CS07_PH$REP_ID & Y19 %in% CS07_PH$REP_ID,
+                      Y19, Y07))
+
+
 # AVC data manipulation ####
 hab07 <- select(CS07_IBD, REP_ID = REP_ID07, AVC07) %>%
   unique()
@@ -39,19 +74,39 @@ hab <- full_join(hab07, hab98) %>%
 BH_comb <- do.call(rbind,
                    list(mutate(select(VEGETATION_PLOTS_20161819, 
                                       REP_ID, BH = BH_PLOT),
-                               Year = 2019),
+                               Year = 2019) %>%
+                          left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19)) %>%
+                          mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), 
+                                                 REPEAT_PLOT_ID, REP_ID)) %>%
+                          select(-REPEAT_PLOT_ID),
                         mutate(select(CS07_IBD, 
                                       REP_ID = REP_ID07, BH = BH07),
-                               Year = 2007),
+                               Year = 2007) %>%
+                          left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)) %>%
+                          mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), 
+                                                 REPEAT_PLOT_ID, REP_ID)) %>%
+                          select(-REPEAT_PLOT_ID),
                         mutate(select(CS98_IBD, 
                                       REP_ID = REP_ID98, BH = BH98),
-                               Year = 1998),
+                               Year = 1998) %>%
+                          left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y9899)) %>%
+                          mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), 
+                                                 REPEAT_PLOT_ID, REP_ID)) %>%
+                          select(-REPEAT_PLOT_ID),
                         mutate(select(CS90_IBD, 
                                       REP_ID = REP_ID90, BH = BH90),
-                               Year = 1990),
+                               Year = 1990)%>%
+                          left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y90)) %>%
+                          mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), 
+                                                 REPEAT_PLOT_ID, REP_ID)) %>%
+                          select(-REPEAT_PLOT_ID),
                         mutate(select(CS78_IBD, 
                                       REP_ID = REP_ID78, BH = BH78),
-                               Year = 1978))) %>%
+                               Year = 1978)%>%
+                          left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y78)) %>%
+                          mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), 
+                                                 REPEAT_PLOT_ID, REP_ID)) %>%
+                          select(-REPEAT_PLOT_ID))) %>%
   left_join(unique(select(BHPH_NAMES, BH = BH_CODE,
                           BH_DESC = BROAD_HABITAT)))
 
@@ -376,25 +431,152 @@ X_Ell <- full_join(
     rename_with(X_Ell_whole, ~ paste0(.x, "_UW"), starts_with("WH"))
   )
 
+# Ellenberg QA data ####
+# Only doing this for Ellenberg R right now
+str(CSVEG_QA)
+
+X_Ell_whole_QA <- CSVEG_QA %>%
+  left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
+                   EBERGR)) %>%
+  mutate(across(EBERGR, na_if, y = 0)) %>% # set 0 values to NA
+  group_by(Year, Surveyor, REP_ID) %>%
+  summarise(across(EBERGR, mean, na.rm = TRUE)) %>%
+  rename_with(~gsub("EBERG","WH_",.x)) %>%
+  mutate_all(function(x) ifelse(!is.nan(x), x, NA)) %>%
+  pivot_wider(names_from = "Surveyor", values_from = "WH_R") %>%
+  mutate(WH_UW_diff = CS - QA)
+
+ggplot(X_Ell_whole_QA, aes(x = CS, y = QA, colour = Year)) + 
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)
+
+EllR_diff <- na.omit(X_Ell_whole_QA$WH_UW_diff)
+
+X_Ell_whole_QA %>% 
+  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
+  group_by(Year) %>%
+  na.omit() %>%
+  summarise(mu = MASS::fitdistr(WH_UW_diff,"t")$estimate[1],
+            sd = MASS::fitdistr(WH_UW_diff,"t")$estimate[2],
+            df = MASS::fitdistr(WH_UW_diff,"t")$estimate[3])
+# Year      mu    sd    df
+# <dbl>   <dbl> <dbl> <dbl>
+# 1  1990 0.00775 0.121  2.58
+# 2  1998 0.103   0.169  6.95
+# 3  2007 0.0111  0.164  4.08
+# 4  2019 0.0169  0.150  5.25
+
+X_Ell_whole_QA %>% 
+  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
+  group_by(Year) %>%
+  na.omit() %>%
+  summarise(mu = MASS::fitdistr(WH_UW_diff,"normal")$estimate[1],
+            sd = MASS::fitdistr(WH_UW_diff,"normal")$estimate[2])
+# Year       mu    sd
+# <dbl>    <dbl> <dbl>
+# 1  1990 -0.00476 0.203
+# 2  1998  0.0936  0.198
+# 3  2007  0.0248  0.236
+# 4  2019  0.0115  0.185
+
+ELL_QA_WH_NORM <- X_Ell_whole_QA %>% 
+  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>% 
+  rbind(mutate(X_Ell_whole_QA, Year = 1978)) %>%
+  group_by(Year) %>%
+  na.omit() %>%
+  summarise(sd = MASS::fitdistr(WH_UW_diff,"normal")$estimate[2])
+
+
+# Check by habitat
+X_Ell_whole_QA_BH <- do.call(rbind, list(
+  X_Ell_whole_QA %>% filter(Year == 1990 & !is.na(WH_UW_diff)) %>%
+    select(REP_ID, Year, WH_UW_diff) %>%
+    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y90)),
+  X_Ell_whole_QA %>% filter(Year == 1998 & !is.na(WH_UW_diff)) %>%
+    select(REP_ID, Year, WH_UW_diff) %>%
+    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y9899)),
+  X_Ell_whole_QA %>% filter(Year == 2007 & !is.na(WH_UW_diff)) %>%
+    select(REP_ID, Year, WH_UW_diff) %>%
+    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)),
+  X_Ell_whole_QA %>% filter(Year %in% c(2016,2019) & !is.na(WH_UW_diff)) %>%
+    select(REP_ID, Year, WH_UW_diff) %>%
+    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19))
+)) %>%
+  select(-REP_ID) %>%
+  left_join(BH_comb, by = c("REPEAT_PLOT_ID" = "REP_ID","Year")) %>%
+  mutate(Habitat = ifelse(BH %in% c(1,2), 
+                          "Woodland",
+                          ifelse(BH %in% c(4,5,6),
+                                 "Improved", 
+                                 ifelse(BH %in% c(7,8,9,10,11,12,15,16), 
+                                        "Habitat","Other"))))
+
+
+
+ggplot(X_Ell_whole_QA_BH, aes(x = BH_DESC, y = WH_UW_diff)) +
+  geom_jitter(height = 0, colour = "grey") +
+  geom_boxplot(fill= NA, outlier.shape = NA)
+ggplot(X_Ell_whole_QA_BH, aes(x = Habitat, y = WH_UW_diff)) +
+  geom_jitter(height = 0, colour = "grey") +
+  geom_boxplot(fill= NA, outlier.shape = NA)
+
+
+X_Ell_whole_QA_BH %>% 
+  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
+  group_by(Year, Habitat) %>%
+  na.omit() %>%
+  summarise(mu = MASS::fitdistr(WH_UW_diff,"normal")$estimate[1],
+            sd = MASS::fitdistr(WH_UW_diff,"normal")$estimate[2])
+# Year Habitat        mu      sd
+# <dbl> <chr>       <dbl>   <dbl>
+#   1  1990 Habitat   0.0264   0.0997
+# 2  1990 Improved -0.0173   0.247 
+# 3  1990 Other     0.0303  NA     
+# 4  1990 Woodland  0.00257  0.0442
+# 5  1998 Habitat   0.172    0.128 
+# 6  1998 Improved  0.0379   0.217 
+# 7  1998 Other     0.317   NA     
+# 8  1998 Woodland  0.195    0.0358
+# 9  2007 Habitat  -0.0148   0.177 
+# 10  2007 Improved  0.0179   0.190 
+# 11  2007 Other     0.0891  NA     
+# 12  2007 Woodland  0.338    0.519 
+# 13  2019 Habitat   0.118    0.155 
+# 14  2019 Improved -0.0143   0.190 
+# 15  2019 Woodland  0.0444  NA     
+X_Ell_whole_QA_BH %>% 
+  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
+  filter(Habitat != "Woodland") %>%
+  filter(Year != 1990) %>%
+  group_by(Year, Habitat) %>%
+  na.omit() %>%
+  summarise(mu = MASS::fitdistr(WH_UW_diff,"t", start = list(m = 0, s = 0.5, df = 3))$estimate[1],
+            sd = MASS::fitdistr(WH_UW_diff,"t", start = list(m = 0, s = 0.5, df = 3))$estimate[2],
+            df = MASS::fitdistr(WH_UW_diff,"t", start = list(m = 0, s = 0.5, df = 3))$estimate[3])
+
+
 # pH data ####
 # Quick fix for UK19_PH values that aren't matching to the veg plots
 UK19_PH <- UK19_PH %>%
-  mutate(REP_ID = paste(SQUARE_NUM,REP_NUM, sep = "X")) %>%
-  mutate(REP_ID = recode(REP_ID,
-                         "546X3" = "546X6",
-                         "546X4" = "546X7",
-                         "776X5" = "776X6",
-                         "828X8" = "828X7",
-                         "861X4" = "861X6",
-                         "878X2" = "878X6",
-                         "983X2" = "983X6",
-                         "1056X3" = "1056X6"))
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
 
+CS78_PH <- CS78_PH %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y78)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID))
 
-CS78_PH$REP_ID <- paste(CS78_PH$SQUARE_NUM,CS78_PH$REP_NUM, sep = "X")
-CS98_PH$REP_ID <- paste(CS98_PH$SQUARE_NUM,CS98_PH$REP_NUM, sep = "X")
-CS07_PH$REP_ID <- paste(CS07_PH$SQUARE_NUM,CS07_PH$REP_NUM, sep = "X")
-CS16_PH$REP_ID <- paste(CS16_PH$SQUARE_NUM,CS16_PH$REP_NUM, sep = "X")
+CS98_PH <- CS98_PH %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y9899)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID))
+
+CS07_PH <- CS07_PH %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID))
+
+CS16_PH <- CS16_PH %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID))
 
 # wide format pH
 PH <- full_join(select(CS78_PH, REP_ID, PH_1978 = PH1978),
@@ -404,6 +586,7 @@ PH <- full_join(select(CS78_PH, REP_ID, PH_1978 = PH1978),
   full_join(select(UK19_PH, REP_ID, PH_2019 = PH_DIW, PHC_2019 = PH_CACL))
 str(PH)
 summary(PH)
+mice::md.pattern(PH)
 
 # long format pH
 PH_long <- pivot_longer(PH, starts_with("PH"),
@@ -418,7 +601,9 @@ PH_long
 
 # pH differences
 # calculate differences between survey years 
-PH <- PH %>%
+PH2 <- PH_long %>%
+  left_join(CS_REP_ID) %>%
+  select(REP_ID = REPEAT_PLOT_ID)
   mutate(diff7898 = PH_1998 - PH_1978,
          diff7807 = PH_2007 - PH_1978,
          diff7816 = PH_2016 - PH_1978,

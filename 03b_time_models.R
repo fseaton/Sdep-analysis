@@ -58,7 +58,7 @@ sd(PH_C_0719)/sqrt(length(PH_C_0719))
 
 # Bayesian models
 mod_data <- mutate(X_Ell, 
-                   SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    ELL = SM_R_W,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
@@ -87,7 +87,7 @@ plot(conditional_effects(sm_r_w_mod))
 
 # weighted 200m2 Ellenberg R
 mod_data <- mutate(X_Ell, 
-                   SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    ELL = WH_R_W,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
@@ -170,11 +170,12 @@ ggsave("Ellenberg R versus time model results.png",
 
 # pH models ####
 summary(PH_long)
-mod_data <- mutate(PH_long, SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
-                   PH = pH,
-                   YR = as.factor(Year)) %>%
+mod_data <- PH_long %>%
+  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
+  mutate(SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         PH = pH,
+         YR = as.factor(Year)) %>%
   ungroup() %>%
-  filter(Year != 2016) %>%
   mutate(YRnm = as.integer(YR)) %>%
   select(REP_ID, SERIES_NUM, YR, YRnm, PH) %>%
   na.omit()
@@ -183,7 +184,7 @@ get_prior(PH ~ YR - 1 + (1|SERIES_NUM) +
             ar(time = YRnm, gr = REP_ID), data = mod_data)
 mod_pr <- c(prior(normal(5,0.5), class = "b"),
             prior(normal(0.2,0.1), class = "ar"),
-            prior(student_t(3, 0, 1), class = "sd"))
+            prior(student_t(3, 0, 2.5), class = "sd"))
 
 # pH in water 
 ph_mod <- brm(PH ~ YR - 1 + (1|SERIES_NUM) +
@@ -213,11 +214,12 @@ ph_pl <- ph_mod %>%
 
 
 # pH in CaCl2
-mod_data <- mutate(PH_long, SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
-                   PH = pH_CaCl2,
-                   YR = as.factor(Year)) %>%
+mod_data <-PH_long %>%
+  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
+  mutate(SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         PH = pH_CaCl2,
+         YR = as.factor(Year)) %>%
   ungroup() %>%
-  filter(Year != 2016)  %>%
   select(REP_ID, SERIES_NUM, YR, PH) %>%
   na.omit() %>% droplevels()%>%
   mutate(YRnm = as.integer(YR))
@@ -243,11 +245,13 @@ ph_c_pl <- phc_mod %>%
   mutate(Year = as.numeric(as.character(YR))) %>%
   ggplot(aes(x = Year, y = .value)) +
   stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
-  scale_y_continuous(limits = c(4.6,5.6)) +
+  scale_y_continuous(limits = c(4.5,5.6)) +
   scale_x_continuous(limits = c(1978,2019)) +
   labs(y = bquote("pH (CaCl"[2]*")"))
 
 ph_pl + ph_c_pl
+ggsave("pH by year model results.png",
+       path = "Outputs/Models/Year_models/", width =20, height = 10, units = "cm")
 
 wh_w + wh_uw + sm_w + sm_uw + 
   ph_pl + ph_c_pl + plot_layout(ncol = 2)
@@ -314,7 +318,7 @@ Comb %>%
   arrange(Variable)
 
 mod_data <- mutate(Comb, 
-                   SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    ELL = SM_R_W,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
@@ -350,7 +354,7 @@ plot(conditional_effects(sm_r_w_hab_mod), ask = FALSE)
 
 # unweighted 4m2 plot
 mod_data <- mutate(Comb, 
-                   SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    ELL = SM_R_UW,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
@@ -375,7 +379,7 @@ plot(conditional_effects(sm_r_uw_hab_mod), ask = FALSE)
 
 # unweighted 200m2 plot
 mod_data <- mutate(Comb, 
-                   SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    ELL = WH_R_UW,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
@@ -399,7 +403,7 @@ plot(conditional_effects(wh_r_uw_hab_mod), ask = FALSE)
 
 # unweighted 200m2 plot
 mod_data <- mutate(Comb, 
-                   SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    ELL = WH_R_W,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
@@ -475,7 +479,7 @@ ggsave("Ellenberg R versus time by habitat no coastal model results variable y l
 
 # pH models
 mod_data <- mutate(Comb, 
-                   SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    PH = pH,
                    YR = as.factor(Year)) %>%
   filter(Year != 2016) %>%
@@ -525,7 +529,7 @@ ggsave("pH versus time by habitat.png", path = "Outputs/Models/Year_models/",
 
 # pH in CaCl2
 mod_data <- mutate(Comb, 
-                   SERIES_NUM = sapply(strsplit(REP_ID, "X"),"[",1),
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    PH = pH_CaCl2,
                    YR = as.factor(Year)) %>%
   filter(Year != 2016) %>%

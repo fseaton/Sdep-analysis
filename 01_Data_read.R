@@ -91,6 +91,12 @@ CS98_PLOTS <- dbReadTable(FEGEN, SQL("CSVEG.CS9899_QUADS_DESCRIPTION"))
 CS90_PLOTS <- dbReadTable(FEGEN, SQL("CSVEG.CS90_QUADS_DESCRIPTION"))
 CS78_PLOTS <- dbReadTable(FEGEN, SQL("CSVEG.CS78_QUADS_DESCRIPTION"))
 
+# plant QA
+CSVEG_QA <- read.csv("Outputs/qa_cs_x_gb_9098071619.csv")
+
+CS_REPEAT_PLOTS <- dbReadTable(FEGEN, SQL("CSVEG.CS_REPEAT_PLOTS"))
+CS_REPEAT_PLOTS_LONG <- dbReadTable(FEGEN, SQL("CSVEG.CS_REPEAT_PLOTS_TRANSPOSED"))
+
 # soils data
 MWA_masq <- dbConnect(odbc(), "MWA", UID="masq", 
                       PWD=pwds[pwds$uid=="masq","pwd"])
