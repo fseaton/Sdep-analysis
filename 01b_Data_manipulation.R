@@ -4,6 +4,7 @@ library(tidyr)
 library(ggplot2)
 library(patchwork)
 library(sf)
+library(data.table)
 
 # Repeat plot identification ####
 # first set up pH REP_IDs
@@ -25,30 +26,59 @@ CS98_PH$REP_ID <- paste(CS98_PH$SQUARE_NUM,CS98_PH$REP_NUM, sep = "X")
 CS07_PH$REP_ID <- paste(CS07_PH$SQUARE_NUM,CS07_PH$REP_NUM, sep = "X")
 CS16_PH$REP_ID <- paste(CS16_PH$SQUARE_NUM,CS16_PH$REP_NUM, sep = "X")
 
-# now correct repeat plots for 2019 data and missing soils plots
-CS_REP_ID <- filter(CS_REPEAT_PLOTS, AMALG_PTYPE == "X") %>%
-  mutate(Y19 = ifelse(!is.na(Y07), Y07,
-                      ifelse(!is.na(Y9899), Y9899,
-                             ifelse(!is.na(Y90), Y90,
-                                    Y78))),
-         Y78 = ifelse(is.na(Y78) & !Y78 %in% CS78_PH$REP_ID & Y90 %in% CS78_PH$REP_ID, 
-                      Y90, 
-                      ifelse(!Y78 %in% CS78_PH$REP_ID & Y9899 %in% CS78_PH$REP_ID, Y9899, Y78)),
-         Y9899 = ifelse(is.na(Y9899) & !Y9899 %in% CS98_PH$REP_ID & Y90 %in% CS98_PH$REP_ID, 
-                              Y90, Y9899)) %>%
-  mutate(Y07 = ifelse(is.na(Y07) & !Y07 %in% CS07_PH$REP_ID & Y19 %in% CS07_PH$REP_ID,
-                      Y19, Y07))
+Soil_missingreps78 <- CS78_PH$REP_ID[!CS78_PH$REP_ID %in% CS_REPEAT_PLOTS$Y78]
+Soil_missingreps98 <- CS98_PH$REP_ID[!CS98_PH$REP_ID %in% CS_REPEAT_PLOTS$Y9899]
+Soil_missingreps07 <- CS07_PH$REP_ID[!CS07_PH$REP_ID %in% CS_REPEAT_PLOTS$Y07]
 
+# now correct repeat plots for 2019 data and missing soils plots
+CS_REP_ID <- CS_REPEAT_PLOTS %>% #filter(CS_REPEAT_PLOTS, AMALG_PTYPE == "X") %>%
+  mutate(Y07 = ifelse(!is.na(Y07), Y07,
+                      ifelse(Y9899 %in% Soil_missingreps07, Y9899, NA)),
+         Y78 = ifelse(!is.na(Y78), Y78, 
+                      ifelse(Y90 %in% Soil_missingreps78, Y90, NA)),
+         Y9899 = ifelse(!is.na(Y9899), Y9899,
+                        ifelse(Y90 %in% Soil_missingreps98, Y90, NA))) %>%
+  mutate(Y19 = Y07)
+
+CS_REP_ID_LONG <- CS_REP_ID %>%
+  select(REPEAT_PLOT_ID, Y78:Y19) %>%
+  pivot_longer(Y78:Y19, names_to = "Year",
+               values_to = "REP_ID") %>%
+  na.omit() %>%
+  mutate(Year = recode(Year,
+                       "Y78" = 1978,
+                       "Y90" = 1990,
+                       "Y9899" = 1998,
+                       "Y07" = 2007,
+                       "Y19" = 2019))
+
+rm(list = ls(pattern = "^Soil_missingreps"))
 
 # AVC data manipulation ####
 hab07 <- select(CS07_IBD, REP_ID = REP_ID07, AVC07) %>%
-  unique()
+  unique() %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, Y07), 
+            by = c("REP_ID" = "Y07")) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
 hab98 <- select(CS98_IBD, REP_ID = REP_ID98, AVC98) %>%
-  unique()
+  unique()%>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, Y9899), 
+            by = c("REP_ID" = "Y9899")) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID))%>%
+  select(-REPEAT_PLOT_ID)
 hab90 <- select(CS90_IBD, REP_ID = REP_ID90, AVC90) %>%
-  unique()
+  unique()%>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, Y90), 
+            by = c("REP_ID" = "Y90")) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID))%>%
+  select(-REPEAT_PLOT_ID)
 hab78 <- select(CS78_IBD, REP_ID = REP_ID78, AVC78) %>%
-  unique()
+  unique()%>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, Y78), 
+            by = c("REP_ID" = "Y78")) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID))%>%
+  select(-REPEAT_PLOT_ID)
 
 # create combined AVC variable, if 07 has AVC use that otherwise use 98 then 78.
 # There are only 3 sites with no AVC data and I can't see how to get theirs as
@@ -68,7 +98,7 @@ hab <- full_join(hab07, hab98) %>%
                            `5` = "Lowland wooded",
                            `6` = "Upland wooded",
                            `7` = "Moorland grass/mosaic",
-                           `8` = "Heath/bog"))
+                           `8` = "Heath/bog")) 
 
 # Broad habitat data ####
 BH_comb <- do.call(rbind,
@@ -115,71 +145,26 @@ BH_comb_nodupes <- BH_comb %>%
   summarise(BH = min(BH), .groups = "drop") %>%
   left_join(unique(select(BHPH_NAMES, BH = BH_CODE,
                           BH_DESC = BROAD_HABITAT)))
-  
+
 
 
 # Ellenberg scores ####
-str(CS19_SP)
-table(CS19_SP$PLOT_TYPE)
-unique(CS19_SP[CS19_SP$PLOT_TYPE=="XX","REP_ID"])
-table(CS19_SP[CS19_SP$PLOT_TYPE=="X","PLOTYEAR"])
-
-str(SPECIES_LIB_TRAITS)
-filter(SPECIES_LIB_CODES, COLUMN_NAME == "GROWTH_FORM")
-
-CS18_ELL <- filter(CS19_SP, PLOT_TYPE %in% c("X","XX")) %>%
-  mutate(REP_ID = paste0(SQUARE,PLOT_TYPE,PLOT_NUMBER)) %>%
-  mutate(REP_ID = gsub("XX","X",REP_ID)) %>%
-  left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
-                   starts_with("EBER"),
-                   GROWTH_FORM)) %>%
-  filter(GROWTH_FORM %in% c("f","fe","g","m","s","ss","w")) %>% # filter to vascular plants
-  mutate(across(starts_with("EBER"), na_if, y = 0)) %>% # set 0 values to NA
-  group_by(REP_ID) %>%
-  summarise(across(starts_with("EBER"), mean, na.rm = TRUE,
-                   .names = "{col}18")) %>%
-  rename_with(~gsub("EBERG","",.x))
-summary(CS18_ELL)
-test <- full_join(CS18_ELL, GM16_IBD, by = c("REP_ID" = "REP_ID16"))
-plot(N18 ~ N16, test);abline(0,1)
-
-CS98_ELL <- CS98_SP %>%
-  select(REP_ID, BRC_NUMBER, TOTAL_COVER) %>%
-  unique() %>%
-  filter(TOTAL_COVER > 0) %>%
-  left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
-                   starts_with("EBER"),
-                   GROWTH_FORM)) %>%
-  # filter(GROWTH_FORM %in% c("f","fe","g","m","s","ss","w")) %>% # filter to vascular plants
-  mutate(across(starts_with("EBER"), na_if, y = 0)) %>% # set 0 values to NA
-  group_by(REP_ID) %>%
-  summarise(across(starts_with("EBER"), function(x) sum(x, na.rm=TRUE)/length(na.omit(EBERGN)),
-                   .names = "{col}98_new")) %>%
-  rename_with(~gsub("EBERG","",.x))
-test <- full_join(CS98_ELL, CS98_IBD, by = c("REP_ID" = "REP_ID98"))
-#par(mfrow=c(2,2))
-plot(R98_new ~ R98, test);abline(0,1)
-plot(N98_new ~ N98, test);abline(0,1)
-plot(W98_new ~ F98, test);abline(0,1)
-plot(L98_new ~ L98, test);abline(0,1)
-par(mfrow=c(1,1))
-summary(CS18_ELL)
-
 # Ellenberg for inner 2x2m square
 X_Ell_inner <- CS07_SP %>%
   left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
   filter(PLOT_TYPE == "X" & NEST_LEVEL < 2)  %>%
   mutate(Year = 2007) %>%
-  select(REP_ID, Year, BRC_NUMBER, FIRST_COVER, TOTAL_COVER) %>%
+  select(REP_ID, Year, BRC_NUMBER, FIRST_COVER) %>%
   full_join(select(mutate(filter(CS19_SP, 
                                  PLOT_TYPE %in% c("X","XX") & NEST_LEVEL < 2), Year = 2019),
-                   REP_ID, Year, BRC_NUMBER, FIRST_COVER, TOTAL_COVER)) %>%
+                   REP_ID, Year, BRC_NUMBER, FIRST_COVER)) %>%
   full_join(select(mutate(filter(CS98_SP, grepl("X", REP_ID) & NEST_LEVEL < 2), Year = 1998),
-                   REP_ID, Year, BRC_NUMBER, FIRST_COVER, TOTAL_COVER)) %>%
+                   REP_ID, Year, BRC_NUMBER, FIRST_COVER)) %>%
   full_join(select(mutate(filter(CS90_SP, grepl("X", REP_ID) & QUADRAT_NEST < 2), Year = 1990),
-                   REP_ID, Year, BRC_NUMBER, FIRST_COVER = C1, TOTAL_COVER)) %>%
+                   REP_ID, Year, BRC_NUMBER, FIRST_COVER = C1)) %>%
   full_join(select(mutate(filter(CS78_SP, grepl("X", REP_ID) & QUADRAT_NEST < 2), Year = 1978),
-                   REP_ID, Year, BRC_NUMBER, TOTAL_COVER = COVER)) %>%
+                   REP_ID, Year, BRC_NUMBER, FIRST_COVER = COVER)) %>%
+  na.omit() %>%
   left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
                    starts_with("EBER"))) %>%
   mutate(across(starts_with("EBER"), na_if, y = 0)) %>% # set 0 values to NA
@@ -202,6 +187,7 @@ X_Ell_whole <- CS07_SP %>%
                           REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
   full_join(unique(select(mutate(filter(CS78_SP, grepl("X", REP_ID)), Year = 1978),
                           REP_ID, Year, BRC_NUMBER, TOTAL_COVER = COVER))) %>%
+  na.omit() %>%
   left_join(unique(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
                           starts_with("EBER")))) %>%
   mutate(across(starts_with("EBER"), na_if, y = 0)) %>% # set 0 values to NA
@@ -210,65 +196,22 @@ X_Ell_whole <- CS07_SP %>%
   rename_with(~gsub("EBERG","WH_",.x)) %>%
   mutate_all(function(x) ifelse(!is.nan(x), x, NA))
 
-X_Ell_comp <- full_join(X_Ell_inner, X_Ell_whole) %>%
-  left_join(hab) %>%
-  mutate(R_diff = SM_R - WH_R,
-         N_diff = SM_N - WH_N,
-         W_diff = SM_W - WH_W,
-         L_diff = SM_L - WH_L)
-
-p1 <- ggplot(X_Ell_comp, aes(x = WH_R, y = SM_R)) +
-  geom_point(size=0.5) +
-  geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~AVC_desc) +
-  labs(x = bquote("Ellenberg R 400m"^2~"plot"),
-       y = bquote("Ellenberg R 4m"^2~"plot"))
-
-ggplot(X_Ell_comp, aes(x = WH_N, y = SM_N)) +
-  geom_point() +
-  geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~AVC_desc)
-
-ggplot(X_Ell_comp, aes(x = R_diff)) +
-  geom_histogram() +
-  geom_vline(xintercept = 0) +
-  facet_wrap(~AVC_desc)
-
-ggplot(X_Ell_comp, aes(x = WH_R, y = SM_R)) +
-  geom_point() +
-  geom_abline(intercept = 0, slope = 1) +
-  facet_grid(Year~AVC_desc) +
-  theme_bw()
-
-ggplot(X_Ell_comp, aes(x = N_diff)) +
-  geom_histogram() +
-  geom_vline(xintercept = 0) +
-  facet_wrap(~AVC_desc)
-
-X_Ell_comp %>%
-  select(Year, REP_ID, ends_with("diff"), AVC_desc) %>%
-  pivot_longer(ends_with("diff"), names_to = "Ellenberg") %>%
-  ggplot(aes(x = value)) +
-  geom_histogram() +
-  geom_vline(xintercept = 0) +
-  scale_x_continuous(limits = c(-2.5,2.5)) +
-  facet_grid(Ellenberg~AVC_desc)
-
 # weighted mean Ellenberg 
 X_wEll_inner <- CS07_SP %>%
   left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
   filter(PLOT_TYPE == "X" & NEST_LEVEL < 2)  %>%
   mutate(Year = 2007) %>%
-  select(REP_ID, Year, BRC_NUMBER, FIRST_COVER, TOTAL_COVER) %>%
+  select(REP_ID, Year, BRC_NUMBER, FIRST_COVER) %>%
   full_join(select(mutate(filter(CS19_SP, 
                                  PLOT_TYPE %in% c("X","XX") & NEST_LEVEL < 2), Year = 2019),
-                   REP_ID, Year, BRC_NUMBER, FIRST_COVER, TOTAL_COVER)) %>%
+                   REP_ID, Year, BRC_NUMBER, FIRST_COVER)) %>%
   full_join(select(mutate(filter(CS98_SP, grepl("X", REP_ID) & NEST_LEVEL < 2), Year = 1998),
-                   REP_ID, Year, BRC_NUMBER, FIRST_COVER, TOTAL_COVER)) %>%
+                   REP_ID, Year, BRC_NUMBER, FIRST_COVER)) %>%
   full_join(select(mutate(filter(CS90_SP, grepl("X", REP_ID) & QUADRAT_NEST < 2), Year = 1990),
-                   REP_ID, Year, BRC_NUMBER, FIRST_COVER = C1, TOTAL_COVER)) %>%
-  full_join(select(mutate(filter(CS78_SP, grepl("X", REP_ID)), Year = 1978),
+                   REP_ID, Year, BRC_NUMBER, FIRST_COVER = C1)) %>%
+  full_join(select(mutate(filter(CS78_SP, grepl("X", REP_ID) & QUADRAT_NEST < 2), Year = 1978),
                    REP_ID, Year, BRC_NUMBER, FIRST_COVER = COVER)) %>%
+  na.omit() %>%
   left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
                    starts_with("EBER"))) %>%
   mutate(across(starts_with("EBER"), na_if, y = 0)) %>% 
@@ -291,6 +234,7 @@ X_wEll_whole <- CS07_SP %>%
                           REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
   full_join(unique(select(mutate(filter(CS78_SP, grepl("X", REP_ID)), Year = 1978),
                           REP_ID, Year, BRC_NUMBER, TOTAL_COVER = COVER))) %>%
+  na.omit() %>%
   left_join(unique(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
                           starts_with("EBER")))) %>%
   mutate(across(starts_with("EBER"), na_if, y = 0)) %>% 
@@ -298,126 +242,6 @@ X_wEll_whole <- CS07_SP %>%
   summarise(across(starts_with("EBER"), weighted.mean, w = TOTAL_COVER, na.rm = TRUE)) %>%
   rename_with(~gsub("EBERG","WH_",.x)) %>%
   mutate_all(function(x) ifelse(!is.nan(x), x, NA))
-
-X_wEll_comp <- full_join(X_wEll_inner, X_wEll_whole) %>%
-  left_join(hab) %>%
-  mutate(R_diff = SM_R - WH_R,
-         N_diff = SM_N - WH_N,
-         W_diff = SM_W - WH_W,
-         L_diff = SM_L - WH_L)
-
-p2 <- ggplot(filter(X_wEll_comp, Year != 1978), aes(x = WH_R, y = SM_R)) +
-  geom_point(size=0.5) +
-  geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~AVC_desc) +
-  labs(x = bquote("Ellenberg R 400m"^2~"plot"),
-       y = bquote("Ellenberg R 4m"^2~"plot"))
-
-ggplot(filter(X_wEll_comp, Year != 1978), aes(x = R_diff)) +
-  geom_histogram() +
-  geom_vline(xintercept = 0) +
-  facet_wrap(~AVC_desc)
-
-X_wEll_comp %>%
-  select(Year, REP_ID, ends_with("diff"), AVC_desc) %>%
-  pivot_longer(ends_with("diff"), names_to = "Ellenberg") %>%
-  ggplot(aes(x = value)) +
-  geom_histogram() +
-  geom_vline(xintercept = 0) +
-  scale_x_continuous(limits = c(-2.5,2.5)) +
-  facet_grid(Ellenberg~AVC_desc)
-
-
-t.test(X_wEll_comp$SM_R,X_wEll_comp$WH_R)
-# t = -0.47853, df = 18816, p-value = 0.6323
-t.test(X_Ell_comp$SM_R,X_Ell_comp$WH_R)
-# t = -3.3001, df = 19015, p-value = 0.0009682
-
-x <- na.omit(unique(X_wEll_comp$AVC_desc))
-for(i in 1:length(x)){
-  
-  dat <- filter(X_wEll_comp, AVC_desc == x[i])
-  print(paste(x[i],"p =",round(t.test(dat$SM_R,dat$WH_R)$p.value,5)))
-}
-# [1] "Tall herb/grass p = 0.85153"
-# [1] "Crops/Weeds p = 0.04266"
-# [1] "Fertile grassland p = 0.92217"
-# [1] "Heath/bog p = 2e-05"
-# [1] "Moorland grass/mosaic p = 0.12709"
-# [1] "Upland wooded p = 0.74556"
-# [1] "Infertile grassland p = 0.92811"
-# [1] "Lowland wooded p = 0.39651"
-
-x <- na.omit(unique(X_Ell_comp$AVC_desc))
-for(i in 1:length(x)){
-  dat <- filter(X_Ell_comp, AVC_desc == x[i])
-  print(paste(x[i],"p =",round(t.test(dat$SM_R,dat$WH_R)$p.value,5)))
-}
-# [1] "Tall herb/grass p = 0.91431"
-# [1] "Crops/Weeds p = 0.06944"
-# [1] "Fertile grassland p = 0.05292"
-# [1] "Heath/bog p = 0"
-# [1] "Moorland grass/mosaic p = 0"
-# [1] "Upland wooded p = 0.00329"
-# [1] "Infertile grassland p = 0.06137"
-# [1] "Lowland wooded p = 0.96831"
-
-p1 + ggtitle("Unweighted") + p2 + ggtitle("Cover weighted")
-ggsave("Ellenberg R plot size comparison.png", path = "Outputs/Graphs/",
-       width = 24, height = 12, units = "cm")
-
-p1 <- ggplot(filter(X_Ell_comp, Year != 1978), aes(x = WH_N, y = SM_N)) +
-  geom_point(size=0.5) +
-  geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~AVC_desc) +
-  labs(x = bquote("Ellenberg N 400m"^2~"plot"),
-       y = bquote("Ellenberg N 4m"^2~"plot")) +
-  ggtitle("Unweighted")
-p2 <- ggplot(filter(X_wEll_comp, Year != 1978), aes(x = WH_N, y = SM_N)) +
-  geom_point(size=0.5) +
-  geom_abline(intercept = 0, slope = 1) +
-  facet_wrap(~AVC_desc) +
-  labs(x = bquote("Ellenberg N 400m"^2~"plot"),
-       y = bquote("Ellenberg N 4m"^2~"plot")) +
-  ggtitle("Cover weighted")
-p1 + p2
-ggsave("Ellenberg N plot size comparison.png", path = "Outputs/Graphs/",
-       width = 24, height = 12, units = "cm")
-
-t.test(X_wEll_comp$SM_N,X_wEll_comp$WH_N)
-# t = -0.12149, df = 18823, p-value = 0.9033
-t.test(X_Ell_comp$SM_N,X_Ell_comp$WH_N)
-# t = -1.621, df = 19043, p-value = 0.105
-
-# correlations
-x <- na.omit(unique(X_wEll_comp$AVC_desc))
-for(i in 1:length(x)){
-  
-  dat <- filter(X_wEll_comp, AVC_desc == x[i])
-  print(paste(x[i],"p =",round(t.test(dat$SM_N,dat$WH_N)$p.value,5)))
-}
-# [1] "Tall herb/grass p = 0.8639"
-# [1] "Crops/Weeds p = 0.04501"
-# [1] "Fertile grassland p = 0.83626"
-# [1] "Heath/bog p = 0.03957"
-# [1] "Moorland grass/mosaic p = 0.07602"
-# [1] "Upland wooded p = 0.63365"
-# [1] "Infertile grassland p = 0.38431"
-# [1] "Lowland wooded p = 0.31157"
-
-x <- na.omit(unique(X_Ell_comp$AVC_desc))
-for(i in 1:length(x)){
-  dat <- filter(X_Ell_comp, AVC_desc == x[i])
-  print(paste(x[i],"p =",round(t.test(dat$SM_N,dat$WH_N)$p.value,5)))
-}
-# [1] "Tall herb/grass p = 0.91795"
-# [1] "Crops/Weeds p = 0.05538"
-# [1] "Fertile grassland p = 0.38703"
-# [1] "Heath/bog p = 0"
-# [1] "Moorland grass/mosaic p = 0"
-# [1] "Upland wooded p = 0.01399"
-# [1] "Infertile grassland p = 0.41287"
-# [1] "Lowland wooded p = 0.62069"
 
 # all data
 X_Ell <- full_join(
@@ -429,134 +253,16 @@ X_Ell <- full_join(
   ) %>%
   full_join(
     rename_with(X_Ell_whole, ~ paste0(.x, "_UW"), starts_with("WH"))
-  )
+  ) %>%
+  ungroup() %>%
+  mutate(REP_ID = gsub("XX","X",REP_ID)) %>%
+  left_join(CS_REP_ID_LONG) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
 
-# Ellenberg QA data ####
-# Only doing this for Ellenberg R right now
-str(CSVEG_QA)
-
-X_Ell_whole_QA <- CSVEG_QA %>%
-  left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
-                   EBERGR)) %>%
-  mutate(across(EBERGR, na_if, y = 0)) %>% # set 0 values to NA
-  group_by(Year, Surveyor, REP_ID) %>%
-  summarise(across(EBERGR, mean, na.rm = TRUE)) %>%
-  rename_with(~gsub("EBERG","WH_",.x)) %>%
-  mutate_all(function(x) ifelse(!is.nan(x), x, NA)) %>%
-  pivot_wider(names_from = "Surveyor", values_from = "WH_R") %>%
-  mutate(WH_UW_diff = CS - QA)
-
-ggplot(X_Ell_whole_QA, aes(x = CS, y = QA, colour = Year)) + 
-  geom_point() +
-  geom_abline(slope = 1, intercept = 0)
-
-EllR_diff <- na.omit(X_Ell_whole_QA$WH_UW_diff)
-
-X_Ell_whole_QA %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
-  group_by(Year) %>%
-  na.omit() %>%
-  summarise(mu = MASS::fitdistr(WH_UW_diff,"t")$estimate[1],
-            sd = MASS::fitdistr(WH_UW_diff,"t")$estimate[2],
-            df = MASS::fitdistr(WH_UW_diff,"t")$estimate[3])
-# Year      mu    sd    df
-# <dbl>   <dbl> <dbl> <dbl>
-# 1  1990 0.00775 0.121  2.58
-# 2  1998 0.103   0.169  6.95
-# 3  2007 0.0111  0.164  4.08
-# 4  2019 0.0169  0.150  5.25
-
-X_Ell_whole_QA %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
-  group_by(Year) %>%
-  na.omit() %>%
-  summarise(mu = MASS::fitdistr(WH_UW_diff,"normal")$estimate[1],
-            sd = MASS::fitdistr(WH_UW_diff,"normal")$estimate[2])
-# Year       mu    sd
-# <dbl>    <dbl> <dbl>
-# 1  1990 -0.00476 0.203
-# 2  1998  0.0936  0.198
-# 3  2007  0.0248  0.236
-# 4  2019  0.0115  0.185
-
-ELL_QA_WH_NORM <- X_Ell_whole_QA %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>% 
-  rbind(mutate(X_Ell_whole_QA, Year = 1978)) %>%
-  group_by(Year) %>%
-  na.omit() %>%
-  summarise(sd = MASS::fitdistr(WH_UW_diff,"normal")$estimate[2])
-
-
-# Check by habitat
-X_Ell_whole_QA_BH <- do.call(rbind, list(
-  X_Ell_whole_QA %>% filter(Year == 1990 & !is.na(WH_UW_diff)) %>%
-    select(REP_ID, Year, WH_UW_diff) %>%
-    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y90)),
-  X_Ell_whole_QA %>% filter(Year == 1998 & !is.na(WH_UW_diff)) %>%
-    select(REP_ID, Year, WH_UW_diff) %>%
-    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y9899)),
-  X_Ell_whole_QA %>% filter(Year == 2007 & !is.na(WH_UW_diff)) %>%
-    select(REP_ID, Year, WH_UW_diff) %>%
-    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)),
-  X_Ell_whole_QA %>% filter(Year %in% c(2016,2019) & !is.na(WH_UW_diff)) %>%
-    select(REP_ID, Year, WH_UW_diff) %>%
-    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19))
-)) %>%
-  select(-REP_ID) %>%
-  left_join(BH_comb, by = c("REPEAT_PLOT_ID" = "REP_ID","Year")) %>%
-  mutate(Habitat = ifelse(BH %in% c(1,2), 
-                          "Woodland",
-                          ifelse(BH %in% c(4,5,6),
-                                 "Improved", 
-                                 ifelse(BH %in% c(7,8,9,10,11,12,15,16), 
-                                        "Habitat","Other"))))
-
-
-
-ggplot(X_Ell_whole_QA_BH, aes(x = BH_DESC, y = WH_UW_diff)) +
-  geom_jitter(height = 0, colour = "grey") +
-  geom_boxplot(fill= NA, outlier.shape = NA)
-ggplot(X_Ell_whole_QA_BH, aes(x = Habitat, y = WH_UW_diff)) +
-  geom_jitter(height = 0, colour = "grey") +
-  geom_boxplot(fill= NA, outlier.shape = NA)
-
-
-X_Ell_whole_QA_BH %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
-  group_by(Year, Habitat) %>%
-  na.omit() %>%
-  summarise(mu = MASS::fitdistr(WH_UW_diff,"normal")$estimate[1],
-            sd = MASS::fitdistr(WH_UW_diff,"normal")$estimate[2])
-# Year Habitat        mu      sd
-# <dbl> <chr>       <dbl>   <dbl>
-#   1  1990 Habitat   0.0264   0.0997
-# 2  1990 Improved -0.0173   0.247 
-# 3  1990 Other     0.0303  NA     
-# 4  1990 Woodland  0.00257  0.0442
-# 5  1998 Habitat   0.172    0.128 
-# 6  1998 Improved  0.0379   0.217 
-# 7  1998 Other     0.317   NA     
-# 8  1998 Woodland  0.195    0.0358
-# 9  2007 Habitat  -0.0148   0.177 
-# 10  2007 Improved  0.0179   0.190 
-# 11  2007 Other     0.0891  NA     
-# 12  2007 Woodland  0.338    0.519 
-# 13  2019 Habitat   0.118    0.155 
-# 14  2019 Improved -0.0143   0.190 
-# 15  2019 Woodland  0.0444  NA     
-X_Ell_whole_QA_BH %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
-  filter(Habitat != "Woodland") %>%
-  filter(Year != 1990) %>%
-  group_by(Year, Habitat) %>%
-  na.omit() %>%
-  summarise(mu = MASS::fitdistr(WH_UW_diff,"t", start = list(m = 0, s = 0.5, df = 3))$estimate[1],
-            sd = MASS::fitdistr(WH_UW_diff,"t", start = list(m = 0, s = 0.5, df = 3))$estimate[2],
-            df = MASS::fitdistr(WH_UW_diff,"t", start = list(m = 0, s = 0.5, df = 3))$estimate[3])
 
 
 # pH data ####
-# Quick fix for UK19_PH values that aren't matching to the veg plots
 UK19_PH <- UK19_PH %>%
   left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19)) %>%
   mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
@@ -583,10 +289,15 @@ PH <- full_join(select(CS78_PH, REP_ID, PH_1978 = PH1978),
                 select(CS98_PH, REP_ID, PH_1998 = PHF2000)) %>%
   full_join(select(CS07_PH, REP_ID, PH_2007 = PH2007_IN_WATER, PHC_2007 = PH2007_IN_CACL2)) %>%
   full_join(select(CS16_PH, REP_ID, PH_2016 = PH_DIW, PHC_2016 = PH_CACL2)) %>%
-  full_join(select(UK19_PH, REP_ID, PH_2019 = PH_DIW, PHC_2019 = PH_CACL))
+  full_join(select(UK19_PH, REP_ID, PH_2019 = PH_DIW, PHC_2019 = PH_CACL)) %>%
+  unique() %>%
+  mutate(PH_2019 = ifelse(!is.na(PH_2019), PH_2019, PH_2016),
+         PHC_2019 = ifelse(!is.na(PHC_2019), PHC_2019, PHC_2016)) %>%
+  select(-ends_with("2016"))
 str(PH)
 summary(PH)
 mice::md.pattern(PH)
+janitor::get_dupes(PH, REP_ID)
 
 # long format pH
 PH_long <- pivot_longer(PH, starts_with("PH"),
@@ -601,24 +312,13 @@ PH_long
 
 # pH differences
 # calculate differences between survey years 
-PH2 <- PH_long %>%
-  left_join(CS_REP_ID) %>%
-  select(REP_ID = REPEAT_PLOT_ID)
+PH <- PH %>%
   mutate(diff7898 = PH_1998 - PH_1978,
          diff7807 = PH_2007 - PH_1978,
-         diff7816 = PH_2016 - PH_1978,
          diff7819 = PH_2019 - PH_1978,
          diff9807 = PH_2007 - PH_1998,
-         diff9816 = PH_2016 - PH_1998,
          diff9819 = PH_2019 - PH_1998,
-         diff0716 = PH_2016 - PH_2007,
-         diff0719 = PH_2019 - PH_2007) %>%
-  mutate(diff0718 = ifelse(!is.na(diff0719), diff0719,
-                           ifelse(!is.na(diff0716), diff0716, NA)),
-         diff7818 = ifelse(!is.na(diff7819), diff7819,
-                           ifelse(!is.na(diff7816), diff7816, NA)),
-         diff9818 = ifelse(!is.na(diff9819), diff9819,
-                           ifelse(!is.na(diff9816), diff9816, NA)))
+         diff0719 = PH_2019 - PH_2007) 
 summary(PH)
 
 PH_diff_long <- PH %>%
@@ -630,279 +330,25 @@ PH_diff_long <- PH %>%
   mutate(name = forcats::fct_inorder(name))
 
 # select only most recent change and convert into wide format for plotting
-PH_Diff_wide <- select(PH, REP_ID, diff0718) %>%
+PH_Diff_wide <- select(PH, REP_ID, diff0719) %>%
   na.omit() %>%
   left_join(select(CS07_PLOTS, REP_ID, POINT_X, POINT_Y))
 
 
-# pH QA data ####
-# 1978 to 1998
-str(CS78_PH_QA)
-CS78_PH_QA <- mutate(CS78_PH_QA, 
-                     across(.fns = ~round(.x/0.005)*0.005))
-
-ggplot(CS78_PH_QA, aes(x = PH_1971, y = PH_2000)) +
-  geom_point() + 
-  geom_smooth(method = "lm")
-summary(lm(PH_2000 ~ PH_1971, CS78_PH_QA))
-
-ph78_diff <- CS78_PH_QA$PH_2000 - CS78_PH_QA$PH_1971 
-MASS::fitdistr(ph78_diff, "t")
-# m             s            df     
-# -0.29246641    0.35713021    4.65432249 
-# ( 0.03176037) ( 0.03581546) ( 1.81106541)
-hist(ph78_diff)
-
-# compare visually fits of normal and student T distribution
-h <- hist(ph78_diff, breaks = 40)
-xfit<-seq(min(ph78_diff),max(ph78_diff),length=40)
-yfit<-dnorm(xfit,mean=mean(ph78_diff),sd=sd(ph78_diff))
-yfit <- yfit*diff(h$mids[1:2])*length(ph78_diff)
-lines(xfit, yfit, col="blue", lwd=2)
-yfit<-brms::dstudent_t(xfit,mu = -0.29246641, sigma = 0.35713021, df = 4.65432249)
-yfit <- yfit*diff(h$mids[1:2])*length(ph78_diff)
-lines(xfit, yfit, col="red", lwd=2)
-
-
-
-# 1998 to 2007
-str(CS98_PH)
-str(CS98_PH_QA)
-
-CS98_QA_sel <- CS98_PH %>%
-  select(SQUARE_NUM, PLOT_TYPE, REP_NUM, PHF2000) %>%
-  mutate(SQUARE_NUM = as.character(SQUARE_NUM)) %>%
-  right_join(CS98_PH_QA) %>%
-  na.omit()
-
-ggplot(CS98_QA_sel, aes(x = PHF2000, y = PH_DIW_QA)) +
-  geom_point() + 
-  geom_abline(slope = 1, intercept = 0) 
-
-CS98_QA_sel %>% 
-  mutate(PH_DIW_diff = PHF2000 - PH_DIW_QA) %>%
-  summarise(diw_mn  = mean(PH_DIW_diff),
-            diw_sd  = sd(PH_DIW_diff))
-#    diw_mn    diw_sd
-# 0.2244382 0.4474434
-
-ph_diff <- CS98_QA_sel$PHF2000 - CS98_QA_sel$PH_DIW_QA
-quantile(abs(ph_diff), c(0.95))/1.96
-# 0.4920918
-
-ribbon_bounds <- data.frame(x = seq(3.5,9,0.1), 
-                            ymax = seq(3.5,9,0.1) + 0.447,
-                            ymin = seq(3.5,9,0.1) - 0.447,
-                            ymax2 = seq(3.5,9,0.1) + 1.96*0.447,
-                            ymin2 = seq(3.5,9,0.1) - 1.96*0.447) 
-ggplot() +
-  geom_point(data = CS98_QA_sel, aes(x = PHF2000, y = PH_DIW_QA)) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin, ymax = ymax), 
-              alpha = 0.3, fill = "blue") +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin2, ymax = ymax2), 
-              alpha = 0.3, fill = "blue") +
-  NULL
-# 11 points outside outer ribbon - should have 8.9
-
-ribbon_bounds <- data.frame(x = seq(3.5,9,0.1), 
-                            ymax = seq(3.5,9,0.1) + 0.492,
-                            ymin = seq(3.5,9,0.1) - 0.492,
-                            ymax2 = seq(3.5,9,0.1) + 1.96*0.492,
-                            ymin2 = seq(3.5,9,0.1) - 1.96*0.492) 
-ggplot() +
-  geom_point(data = CS98_QA_sel, aes(x = PHF2000, y = PH_DIW_QA)) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin, ymax = ymax), 
-              alpha = 0.3, fill = "blue") +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin2, ymax = ymax2), 
-              alpha = 0.3, fill = "blue") +
-  NULL
-# 9 points outside outer ribbon
-
-ribbon_bounds <- data.frame(x = seq(2.5,8.5,0.1), 
-                            ymax = seq(2.5,8.5,0.1) + 0.63,
-                            ymin = seq(2.5,8.5,0.1) - 0.63,
-                            ymax2 = seq(2.5,8.5,0.1) + 1.96*0.63,
-                            ymin2 = seq(2.5,8.5,0.1) - 1.96*0.63) 
-ggplot() +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin, ymax = ymax), 
-              alpha = 0.3, fill = "blue") +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin2, ymax = ymax2), 
-              alpha = 0.3, fill = "blue") +
-  # scale_y_continuous(limits = c(2.5,8.5), expand = c(0,0)) +
-  scale_x_continuous(limits = c(2.5,8.5), expand = c(0,0)) +
-  NULL
-
-MASS::fitdistr(ph_diff, "t")
-# m            s            df    
-# 0.22816783   0.30264485   3.72142853 
-# (0.02716051) (0.02722469) (1.02880468)
-
-
-# compare visually fits of normal and student T distribution
-h <- hist(ph_diff, breaks = 40)
-xfit<-seq(min(ph_diff),max(ph_diff),length=40)
-yfit<-dnorm(xfit,mean=mean(ph_diff),sd=sd(ph_diff))
-yfit <- yfit*diff(h$mids[1:2])*length(ph_diff)
-lines(xfit, yfit, col="blue", lwd=2)
-yfit<-brms::dstudent_t(xfit,mu = 0.22816783, sigma = 0.30264485, df = 3.72142853)
-yfit <- yfit*diff(h$mids[1:2])*length(ph_diff)
-lines(xfit, yfit, col="red", lwd=2)
-
-
-
-# 2007
-CS07_PH_QA_sel <- CS07_PH_QA %>% 
-  mutate(REP_ID = paste0(SQUARE_NUM, PLOT_TYPE, REP_NUM)) %>%
-  filter(QA_DUP_SAMPLE == "Duplicate Sample") %>%
-  select(REP_ID, QA_DUP_SAMPLE, PH_DIW_QA = PH2007_IN_WATER, 
-         PH_CACL2_QA = PH2007_IN_CACL2) %>%
-    na.omit() %>%
-  left_join(select(CS07_PH, REP_ID, PH_DIW = PH2007_IN_WATER,
-                   PH_CACL2 = PH2007_IN_CACL2)) %>%
-  na.omit()
-# 115
-
-
-ggplot(CS07_PH_QA_sel, aes(x = PH_DIW, y = PH_DIW_QA)) +
-  geom_point() + 
-  geom_abline(slope = 1, intercept = 0) 
-summary(lm(PH_DIW ~ PH_DIW_QA, CS07_PH_QA_sel))
-
-CS07_PH_QA_sel %>% 
-  mutate(PH_DIW_diff = PH_DIW - PH_DIW_QA,
-         PH_CACL2_diff = PH_CACL2 - PH_CACL2_QA) %>%
-  summarise(diw_mn  = mean(PH_DIW_diff),
-            diw_sd  = sd(PH_DIW_diff),
-            cacl2_mn = mean(PH_CACL2_diff),
-            cacl2_sd = sd(PH_CACL2_diff))
-#        diw_mn    diw_sd   cacl2_mn  cacl2_sd
-#  -0.001478261 0.2527784 0.02156522 0.2273593
-
-ribbon_bounds <- data.frame(x = seq(3.5,9,0.1), 
-                            ymax = seq(3.5,9,0.1) + 0.25,
-                            ymin = seq(3.5,9,0.1) - 0.25,
-                            ymax2 = seq(3.5,9,0.1) + 1.96*0.25,
-                            ymin2 = seq(3.5,9,0.1) - 1.96*0.25) 
-ggplot() +
-  geom_point(data = CS07_PH_QA_sel, aes(x = PH_DIW, y = PH_DIW_QA)) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin, ymax = ymax), 
-              alpha = 0.3, fill = "blue") +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin2, ymax = ymax2), 
-              alpha = 0.3, fill = "blue") +
-  NULL
-ph07_diff <- CS07_PH_QA_sel$PH_DIW - CS07_PH_QA_sel$PH_DIW_QA
-MASS::fitdistr(ph07_diff, "t")
-# m            s            df    
-# 0.01133412   0.14252233   2.45484216 
-# (0.01712093) (0.01895973) (0.70482518)
-
-# compare visually fits of normal and student T distribution
-h <- hist(ph07_diff, breaks = 40)
-xfit<-seq(min(ph07_diff),max(ph07_diff),length=40)
-yfit<-dnorm(xfit,mean=mean(ph07_diff),sd=sd(ph07_diff))
-yfit <- yfit*diff(h$mids[1:2])*length(ph07_diff)
-lines(xfit, yfit, col="blue", lwd=2)
-yfit<-brms::dstudent_t(xfit,mu = 0.01133412, sigma = 0.14252233, df = 2.45484216)
-yfit <- yfit*diff(h$mids[1:2])*length(ph07_diff)
-lines(xfit, yfit, col="red", lwd=2)
-
-
-ph07_diff <- CS07_PH_QA_sel$PH_CACL2 - CS07_PH_QA_sel$PH_CACL2_QA
-MASS::fitdistr(ph07_diff, "t")
-# m            s            df    
-# 0.02140830   0.09420440   1.66293369 
-# (0.01135743) (0.01451080) (0.39417898)
-
-# 2019
-summary(UK19_PH_QA)
-UK19_PH_QA %>% as.data.frame() %>%
-  mutate(PH_DIW_diff = PH_DIW - PH_DIW_QA,
-         PH_CACL2_diff = PH_CACL2 - PH_CACL2_QA) %>%
-  summarise(diw_mn  = mean(PH_DIW_diff, na.rm = TRUE),
-            diw_sd  = sd(PH_DIW_diff, na.rm = TRUE),
-            cacl2_mn = mean(PH_CACL2_diff, na.rm = TRUE),
-            cacl2_sd = sd(PH_CACL2_diff, na.rm = TRUE))
-#      diw_mn   diw_sd cacl2_mn  cacl2_sd
-# -0.02904762 0.165941   -0.015 0.1195322
-
-ribbon_bounds <- data.frame(x = seq(3,8.5,0.1), 
-                            ymax = seq(3,8.5,0.1) + 0.16,
-                            ymin = seq(3,8.5,0.1) - 0.16,
-                            ymax2 = seq(3,8.5,0.1) + 1.96*0.16,
-                            ymin2 = seq(3,8.5,0.1) - 1.96*0.16) 
-ggplot() +
-  geom_point(data = UK19_PH_QA, aes(x = PH_DIW, y = PH_DIW_QA)) +
-  geom_abline(slope = 1, intercept = 0) +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin, ymax = ymax), 
-              alpha = 0.3, fill = "blue") +
-  geom_ribbon(data = ribbon_bounds, aes(x = x, ymin = ymin2, ymax = ymax2), 
-              alpha = 0.3, fill = "blue") +
-  NULL
-# 95% of points within 2 sd of mean
-
-ph19_diff <- na.omit(UK19_PH_QA$PH_DIW - UK19_PH_QA$PH_DIW_QA)
-MASS::fitdistr(ph19_diff, "t")
-# m             s            df     
-# -0.02019703    0.08408127    2.83794645 
-# ( 0.01140272) ( 0.01150246) ( 0.94386890)
-
-# compare visually fits of normal and student T distribution
-h <- hist(ph19_diff, breaks = 40)
-xfit<-seq(min(ph19_diff),max(ph19_diff),length=40)
-yfit<-dnorm(xfit,mean=mean(ph19_diff),sd=sd(ph19_diff))
-yfit <- yfit*diff(h$mids[1:2])*length(ph19_diff)
-lines(xfit, yfit, col="blue", lwd=2)
-yfit<-brms::dstudent_t(xfit,mu = -0.02019703, sigma = 0.08408127, df = 2.83794645)
-yfit <- yfit*diff(h$mids[1:2])*length(ph19_diff)
-lines(xfit, yfit, col="red", lwd=2)
-
-
-ph19_diff <- na.omit(UK19_PH_QA$PH_CACL2 - UK19_PH_QA$PH_CACL2_QA)
-MASS::fitdistr(ph19_diff, "t")
-# m              s              df     
-# -0.000130451    0.053572120    2.458920628 
-# ( 0.007404153) ( 0.007561589) ( 0.748074972)
-
-# compare visually fits of normal and student T distribution
-h <- hist(ph19_diff, breaks = 40)
-xfit<-seq(min(ph19_diff),max(ph19_diff),length=40)
-yfit<-dnorm(xfit,mean=mean(ph19_diff),sd=sd(ph19_diff))
-yfit <- yfit*diff(h$mids[1:2])*length(ph19_diff)
-lines(xfit, yfit, col="blue", lwd=2)
-yfit<-brms::dstudent_t(xfit,mu = -0.000130451, sigma = 0.053572120, df = 2.458920628)
-yfit <- yfit*diff(h$mids[1:2])*length(ph19_diff)
-lines(xfit, yfit, col="red", lwd=2)
-
-
-phdiff0719 <- brms::rstudent_t(100000,2.837946,-0.020197,0.084081) -
-  brms::rstudent_t(100000,2.454842,0.011334,0.142522)
-MASS::fitdistr(phdiff0719, "t")
-# m              s              df     
-# -0.0308745048    0.1868478133    2.9224355206 
-# ( 0.0007269228) ( 0.0007630587) ( 0.0298580039)
-
-phdiff0719 <- brms::rstudent_t(100000,2.458921,-0.000130,0.053572) -
-  brms::rstudent_t(100000,1.662934,0.094204,0.021408)
-MASS::fitdistr(phdiff0719, "t")
-# m               s               df      
-# -0.0941307056    0.0651198536    2.3597493212 
-# ( 0.0002605570) ( 0.0002760143) ( 0.0208361922)
 
 PH_QA_diff <- data.frame(
   Time_period = c("7898","9807","0719"),
   PH_DIW_SE = c(0.357,0.303,0.187),
-  PH_CACL2_SE = c(NA,NA,0.065) 
+  PH_CACL2_SE = c(NA,NA,0.065),
+  rain_diff_sd = 22
 )
 
 
 # LOI ####
 LOI <- full_join(select(CS78_PH, REP_ID, LOI_1978 = LOI1978),
-                select(CS98_PH, REP_ID, LOI_1998 = LOI2000)) %>%
+                 select(CS98_PH, REP_ID, LOI_1998 = LOI2000)) %>%
   full_join(select(CS07_PH, REP_ID, LOI_2007 = LOI2007)) %>%
+  full_join(select(CS16_PH, REP_ID, LOI_2016 = LOI)) %>%
   full_join(select(UK19_PH, REP_ID, LOI_2019 = LOI)) %>%
   mutate(LOI_2019 = 100*LOI_2019)
 str(LOI)
@@ -910,37 +356,137 @@ summary(LOI)
 
 # long format pH
 LOI_long <- pivot_longer(LOI, starts_with("LOI"),
-                        values_to = "LOI",
-                        values_drop_na = TRUE,
-                        names_to = "Year",
-                        names_prefix = "LOI_",
-                        names_transform = list(Year = as.integer)) 
+                         values_to = "LOI",
+                         values_drop_na = TRUE,
+                         names_to = "Year",
+                         names_prefix = "LOI_",
+                         names_transform = list(Year = as.integer)) %>%
+  mutate(Year = ifelse(Year == 2016, 2019, Year))
 LOI_long
 
 
 # Soil moisture ####
 UK19_WET <- UK19_WET %>%
-  mutate(REP_ID = paste0(`Square number...1`,`X plot...2`)) %>%
-  select(-starts_with("Square")) %>%
-  select(-starts_with("X "))
+  mutate(REP_ID = paste0(`Square number`,`X plot`)) 
 
 MOISTURE <- CS_tier4 %>%
   mutate(REP_ID = ifelse(!is.na(REP_ID07), REP_ID07,
                          ifelse(!is.na(REP_ID98), REP_ID98,
                                 ifelse(!is.na(REP_ID78), REP_ID78, NA)))) %>%
   select(REP_ID, MOISTURE_CONTENT_07, MOISTURE_CONTENT_98) %>%
-  full_join(select(UK19_WET, REP_ID, MOISTURE_CONTENT_19 = `g water/wet weight of soil`)) %>%
+  full_join(select(UK19_WET, REP_ID, MOISTURE_CONTENT_19 = `g_water/wet_weight_of_soil`)) %>%
   # mutate(VWC_19 = 100*VWC_19) %>%
   pivot_longer(starts_with("MOISTURE"), names_to = "variable", 
-               values_to = "Moisture") %>%
+               values_to = "Moisture", values_drop_na = TRUE) %>%
   mutate(Year = ifelse(variable == "MOISTURE_CONTENT_07", 2007,
                        ifelse(variable == "MOISTURE_CONTENT_98", 1998,
                               ifelse(variable == "MOISTURE_CONTENT_19", 2019, NA)))) %>%
-  select(-variable) %>% na.omit()
+  select(-variable) %>% na.omit() %>% unique() %>%
+  left_join(CS_REP_ID_LONG) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
 
 
 # Spatial data manipulation ####
 # rainfall - monthly totals ####
+str(plot_dates)
+sample_date <- plot_dates %>%
+  select(SERIES_NUM, starts_with("MID_")) %>%
+  full_join(
+    select(VEGETATION_PLOTS_20161819, SERIES_NUM = SQUARE, 
+           MID_DATE19 = COMPLETED_DATE) %>%
+      unique()) %>%
+  mutate(across(starts_with("MID_"), lubridate::ymd)) %>%
+  mutate(across(starts_with("MID_"), lubridate::month))
+
+# 2018
+rain18 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_201801-201812.nc"
+rain <- raster::brick(rain18)
+rain[rain > 9e20] <- NA
+
+cs_loc18 <- VEGETATION_PLOTS_20161819 %>%
+  filter(PLOTYEAR == 2018) %>%
+  select(REP_ID, POINT_X, POINT_Y) %>%
+  # have 3 duplicated plots so taking average of the points given
+  # 377D4, 431Y1, 912R1
+  group_by(REP_ID) %>%
+  summarise(POINT_X = mean(POINT_X), POINT_Y = mean(POINT_Y)) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("POINT_X","POINT_Y"), crs = 27700)
+
+cs_loc_rain18 <- raster::extract(rain, cs_loc18)
+rownames(cs_loc_rain18) <- cs_loc18$REP_ID
+# all reps fall in raster
+colnames(cs_loc_rain18) <- paste("X",c(1:12), "2018", sep = "_")
+
+
+cs_loc_rain18_long <- cs_loc_rain18 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("REP_ID") %>%
+  pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
+               names_prefix = "X_", names_sep = "_",
+               values_to = "rainfall") %>%
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
+         rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
+  left_join(select(sample_date, SERIES_NUM, DATE = MID_DATE19)) %>%
+  mutate(DATE = ifelse(!is.na(DATE), DATE, 
+                       round(mean(DATE, na.rm = TRUE))+1),
+         Month = as.numeric(Month)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month > DATE - 4, 1,0)) %>%
+  filter(field_season == 1) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(mean_rainfall = mean(rainfall),
+            sum_rainfall = sum(rainfall)) 
+
+
+# 2016
+rain16 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_201601-201612.nc"
+rain <- raster::brick(rain16)
+rain[rain > 9e20] <- NA
+
+cs_loc16 <- VEGETATION_PLOTS_20161819 %>%
+  filter(PLOTYEAR == 2016) %>%
+  select(REP_ID, POINT_X, POINT_Y) %>%
+  # have 3 duplicated plots so taking average of the points given
+  # 377D4, 431Y1, 912R1
+  group_by(REP_ID) %>%
+  summarise(POINT_X = mean(POINT_X), POINT_Y = mean(POINT_Y)) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("POINT_X","POINT_Y"), crs = 27700)
+
+cs_loc_rain16 <- raster::extract(rain, cs_loc16)
+rownames(cs_loc_rain16) <- cs_loc16$REP_ID
+# for reps that don't fall in the raster get average of all values within 2000m
+cs_loc16_na <- cs_loc16 %>%
+  filter(REP_ID %in% rownames(cs_loc_rain16)[is.na(cs_loc_rain16[,1])])
+cs_loc_rain16_na <- raster::extract(rain, cs_loc16_na,
+                                    fun = mean, buffer = 2000)
+rownames(cs_loc_rain16_na) <- cs_loc16_na$REP_ID
+cs_loc_rain16 <- rbind(na.omit(cs_loc_rain16),
+                       cs_loc_rain16_na)
+colnames(cs_loc_rain16) <- paste("X",c(1:12), "2016", sep = "_")
+
+
+cs_loc_rain16_long <- cs_loc_rain16 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("REP_ID") %>%
+  pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
+               names_prefix = "X_", names_sep = "_",
+               values_to = "rainfall") %>%
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
+         rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
+  left_join(select(sample_date, SERIES_NUM, DATE = MID_DATE19)) %>%
+  mutate(DATE = ifelse(!is.na(DATE), DATE, 
+                       round(mean(DATE, na.rm = TRUE))+1),
+         Month = as.numeric(Month)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month > DATE - 4, 1,0)) %>%
+  filter(field_season == 1) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(mean_rainfall = mean(rainfall),
+            sum_rainfall = sum(rainfall)) 
+
+
+# 2007
 rain07 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_200701-200712.nc"
 rain <- raster::brick(rain07)
 rain[rain > 9e20] <- NA
@@ -951,35 +497,27 @@ cs_loc07 <- plot_locations %>%
   na.omit() %>%
   st_as_sf(coords = c("E_10_FIG_1M","N_10_FIG_1M"), crs = 27700)
 
-cs_loc_rain <- raster::extract(rain, cs_loc07)
-rownames(cs_loc_rain) <- cs_loc07$REP_ID
+cs_loc_rain07 <- raster::extract(rain, cs_loc07)
+rownames(cs_loc_rain07) <- cs_loc07$REP_ID
 # for reps that don't fall in the raster get average of all values within 2000m
 cs_loc07_na <- cs_loc07 %>%
-  filter(REP_ID %in% rownames(cs_loc_rain)[is.na(cs_loc_rain[,1])])
-cs_loc_rain_na <- raster::extract(rain, cs_loc07_na,
+  filter(REP_ID %in% rownames(cs_loc_rain07)[is.na(cs_loc_rain07[,1])])
+cs_loc_rain07_na <- raster::extract(rain, cs_loc07_na,
                                   fun = mean, buffer = 2000)
-rownames(cs_loc_rain_na) <- cs_loc07_na$REP_ID
-cs_loc_rain <- rbind(na.omit(cs_loc_rain),
-                     cs_loc_rain_na)
-colnames(cs_loc_rain) <- paste("X",c(1:12), "2007", sep = "_")
+rownames(cs_loc_rain07_na) <- cs_loc07_na$REP_ID
+cs_loc_rain07 <- rbind(na.omit(cs_loc_rain07),
+                     cs_loc_rain07_na)
+colnames(cs_loc_rain07) <- paste("X",c(1:12), "2007", sep = "_")
 
 
-cs_loc_rain07_long <- cs_loc_rain %>%
+cs_loc_rain07_long <- cs_loc_rain07 %>%
   as.data.frame() %>%
   tibble::rownames_to_column("REP_ID") %>%
   pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
                names_prefix = "X_", names_sep = "_",
                values_to = "rainfall") %>%
   mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
-         rainfall = ifelse(rainfall < 9e20, rainfall, NA))
-
-str(plot_dates)
-sample_date <- plot_dates %>%
-  select(SERIES_NUM, starts_with("MID_")) %>%
-  mutate(across(starts_with("MID_"), lubridate::ymd)) %>%
-  mutate(across(starts_with("MID_"), lubridate::month))
-
-cs_loc_rain07_long <- cs_loc_rain07_long %>%
+         rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
   left_join(select(sample_date, SERIES_NUM, DATE = MID__DATE07)) %>%
   mutate(DATE = ifelse(!is.na(DATE), DATE, 
                        round(mean(DATE, na.rm = TRUE))+1),
@@ -996,24 +534,6 @@ rain98 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_199801-199812.n
 rain <- raster::brick(rain98)
 rain[rain > 9e20] <- NA
 
-# check to see plots and rasters align
-cs_loc98_wgs <- plot_locations %>%
-  filter(YEAR == "y9899") %>% 
-  mutate(EAST = ifelse(!is.na(E_6_FIG_100M),E_6_FIG_100M, E_4_FIG_1KM),
-         NORTH = ifelse(!is.na(N_6_FIG_100M),N_6_FIG_100M, N_4_FIG_1KM)) %>% 
-  select(SERIES_NUM, EAST, NORTH) %>%
-  group_by(SERIES_NUM) %>%
-  summarise(EAST = mean(EAST), NORTH = mean(NORTH)) %>%
-  ungroup() %>%
-  mutate(EAST= round(EAST, -3), NORTH = round(NORTH, -3)) %>%
-  na.omit() %>%
-  st_as_sf(coords = c("EAST","NORTH"), crs = 27700) %>%
-  st_transform(4326)
-leaflet() %>% addTiles() %>% 
-  addRasterImage(rain_june, opacity = 0.5) %>% 
-  addMarkers(data=cs_loc98_wgs, 
-             label = cs_loc98_wgs$SERIES_NUM)
-
 cs_loc98 <- plot_locations %>%
   filter(YEAR == "y9899") %>%
   dplyr::select(REP_ID, E_10_FIG_1M, N_10_FIG_1M) %>%
@@ -1024,17 +544,18 @@ cs_loc_rain98 <- raster::extract(rain, cs_loc98)
 rownames(cs_loc_rain98) <- cs_loc98$REP_ID
 # for reps that don't fall in the raster get average of all values within 2000m
 cs_loc98_na <- cs_loc98 %>%
-  filter(REP_ID %in% rownames(cs_loc_rain)[is.na(cs_loc_rain[,1])])
+  filter(REP_ID %in% rownames(cs_loc_rain98)[is.na(cs_loc_rain98[,1])])
 cs_loc_rain_na <- raster::extract(rain, cs_loc98_na,
                                   fun = mean, buffer = 2000)
 rownames(cs_loc_rain_na) <- cs_loc98_na$REP_ID
-cs_loc_rain <- rbind(na.omit(cs_loc_rain),
-                     cs_loc_rain_na)
+cs_loc_rain98 <- rbind(na.omit(cs_loc_rain98),
+                       cs_loc_rain_na)
 colnames(cs_loc_rain98) <- paste("X",c(1:12), "1998", sep = "_")
 
 cs_loc_rain98_long <- cs_loc_rain98 %>%
   as.data.frame() %>%
   tibble::rownames_to_column("REP_ID") %>%
+  # mutate(REP_ID = substring(REP_ID, 2)) %>%
   pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
                names_prefix = "X_", names_sep = "_",
                values_to = "rainfall") %>%
@@ -1065,17 +586,18 @@ cs_loc_rain90 <- raster::extract(rain, cs_loc90)
 rownames(cs_loc_rain90) <- cs_loc90$REP_ID
 # for reps that don't fall in the raster get average of all values within 2000m
 cs_loc90_na <- cs_loc90 %>%
-  filter(REP_ID %in% rownames(cs_loc_rain)[is.na(cs_loc_rain[,1])])
+  filter(REP_ID %in% rownames(cs_loc_rain90)[is.na(cs_loc_rain90[,1])])
 cs_loc_rain_na <- raster::extract(rain, cs_loc90_na,
                                   fun = mean, buffer = 2000)
 rownames(cs_loc_rain_na) <- cs_loc90_na$REP_ID
-cs_loc_rain <- rbind(na.omit(cs_loc_rain),
-                     cs_loc_rain_na)
+cs_loc_rain90 <- rbind(na.omit(cs_loc_rain90),
+                       cs_loc_rain_na)
 colnames(cs_loc_rain90) <- paste("X",c(1:12), "1990", sep = "_")
 
 cs_loc_rain90_long <- cs_loc_rain90 %>%
   as.data.frame() %>%
   tibble::rownames_to_column("REP_ID") %>%
+  # mutate(REP_ID = substring(REP_ID, 2)) %>%
   pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
                names_prefix = "X_", names_sep = "_",
                values_to = "rainfall") %>%
@@ -1107,17 +629,18 @@ cs_loc_rain78 <- raster::extract(rain, cs_loc78)
 rownames(cs_loc_rain78) <- cs_loc78$REP_ID
 # for reps that don't fall in the raster get average of all values within 2000m
 cs_loc78_na <- cs_loc78 %>%
-  filter(REP_ID %in% rownames(cs_loc_rain)[is.na(cs_loc_rain[,1])])
+  filter(REP_ID %in% rownames(cs_loc_rain78)[is.na(cs_loc_rain78[,1])])
 cs_loc_rain_na <- raster::extract(rain, cs_loc78_na,
                                   fun = mean, buffer = 2000)
 rownames(cs_loc_rain_na) <- cs_loc78_na$REP_ID
-cs_loc_rain <- rbind(na.omit(cs_loc_rain),
-                     cs_loc_rain_na)
+cs_loc_rain78 <- rbind(na.omit(cs_loc_rain78),
+                       cs_loc_rain_na)
 colnames(cs_loc_rain78) <- paste("X",c(1:12), "1978", sep = "_")
 
 cs_loc_rain78_long <- cs_loc_rain78 %>%
   as.data.frame() %>%
   tibble::rownames_to_column("REP_ID") %>%
+  # mutate(REP_ID = substring(REP_ID, 2)) %>%
   pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
                names_prefix = "X_", names_sep = "_",
                values_to = "rainfall") %>%
@@ -1134,112 +657,114 @@ cs_loc_rain78_long <- cs_loc_rain78 %>%
             sum_rainfall = sum(rainfall))
 
 #combine years
-cs_survey_rainfall <- do.call(rbind, list(cs_loc_rain07_long,
+cs_survey_rainfall <- do.call(rbind, list(cs_loc_rain18_long,
+                                          cs_loc_rain16_long,
+                                          cs_loc_rain07_long,
                                           cs_loc_rain98_long,
                                           cs_loc_rain90_long,
                                           cs_loc_rain78_long))
-ggplot(cs_survey_rainfall, aes(x = mean_rainfall)) +
-  geom_histogram() +
-  facet_wrap(~Year) +
-  labs(x = "Average monthly rainfall for 4 months pre-survey")
-
-p1 <- ggplot(cs_survey_rainfall, aes(x = mean_rainfall)) +
-  geom_histogram() +
-  facet_wrap(~Year, ncol = 1, scales = "free_y") +
-  scale_x_continuous(expand = c(0,0)) +
-  labs(x = "Average monthly rainfall for 4 months pre-survey")
-p2 <- ggplot(cs_survey_rainfall, aes(x = sum_rainfall)) +
-  geom_histogram() +
-  facet_wrap(~Year, ncol = 1, scales = "free_y") +
-  scale_x_continuous(expand = c(0,0)) +
-  labs(x = "Total rainfall for 4 months pre-survey")
-p1 + p2
-
-ggplot(cs_survey_rainfall, aes(x = mean_rainfall, y = sum_rainfall)) + 
-  geom_point() +
-  geom_abline(slope=4, intercept = 0) +
-  facet_wrap(~Year)
-# basically the same
-
-p1
-ggsave("Average monthly rainfall for 4 months pre-survey.png",
-       path = "Outputs/Graphs/",width = 12, height = 15, units = "cm")
+cs_survey_rainfall <- CS_REP_ID_LONG %>%
+  mutate(Year = as.character(Year)) %>%
+  na.omit() %>%
+  right_join(mutate(cs_survey_rainfall, 
+                    Year = ifelse(Year %in% c("2016","2018"), "2019",Year))) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
 
 
 # Climatic averages
 str(plot_locations)
-CS19_locs <- plot_locations %>%
-  filter(REP_ID %in% VEGETATION_PLOTS_20161819$REP_ID) %>%
-  mutate(YEAR = "y19") %>%
-  group_by(REP_ID, YEAR, SERIES_NUM) %>%
-  summarise_if(is.numeric, mean) %>%
-  mutate(ID = NA, REPEAT_PLOT_ID = NA, OS_8_FIG_10M = NA,
-         OS_6_FIG_100M = NA, OS_4_FIG_1KM = NA,OS_2_FIG_10KM = NA,) %>%
+CS19_locs <- VEGETATION_PLOTS_20161819 %>%
+  select(SERIES_NUM = SQUARE, REP_ID, YEAR = PLOTYEAR,
+         E_10_FIG_1M = POINT_X, N_10_FIG_1M = POINT_Y)%>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19)) %>%
+  mutate(REPEAT_PLOT_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID),
+         ID = NA, REPEAT_PLOT_ID = NA, OS_8_FIG_10M = NA,
+         OS_6_FIG_100M = NA, OS_4_FIG_1KM = NA,OS_2_FIG_10KM = NA,
+         E_6_FIG_100M = round(E_10_FIG_1M, -2), 
+         N_6_FIG_100M = round(N_10_FIG_1M, -2), 
+         E_4_FIG_1KM = round(E_10_FIG_1M, -3), 
+         N_4_FIG_1KM = round(N_10_FIG_1M, -3), 
+         E_2_FIG_10KM = round(E_10_FIG_1M, -4), 
+         N_2_FIG_10KM = round(N_10_FIG_1M, -4)) %>%
   select(all_of(colnames(plot_locations)))
+  
 allplot_loc <- plot_locations %>%
+  filter(REP_ID != "SQ_BL") %>%
   rbind(CS19_locs) %>%
   mutate(plot_x = ifelse(!is.na(E_6_FIG_100M), E_6_FIG_100M, E_4_FIG_1KM),
          plot_y = ifelse(!is.na(N_6_FIG_100M), N_6_FIG_100M, N_4_FIG_1KM)) %>%
-  select(REP_ID, YEAR, plot_x, plot_y) %>%
-  na.omit() %>%
+  select(REPEAT_PLOT_ID, plot_x, plot_y) %>%
+  na.omit() %>% unique() %>%
+  group_by(REPEAT_PLOT_ID) %>%
+  summarise(plot_x = mean(plot_x), plot_y = mean(plot_y)) %>%
   st_as_sf(coords = c("plot_x","plot_y"), crs = 27700)
 
 clim_rain <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_ann-30y_198101-201012.nc"
 rain <- raster::brick(clim_rain)
+rain[rain>9e20] <- NA
 cs_loc_rain30y <- raster::extract(rain, allplot_loc)
+rownames(cs_loc_rain30y) <- allplot_loc$REPEAT_PLOT_ID
+# for reps that don't fall in the raster get average of all values within 2000m
+cs_loc_rain30y_na <- allplot_loc %>%
+  filter(REPEAT_PLOT_ID %in% rownames(cs_loc_rain30y)[is.na(cs_loc_rain30y[,1])])
+cs_loc_rain_na <- matrix(raster::extract(rain, cs_loc_rain30y_na,
+                                         fun = mean, buffer = 2000))
+rownames(cs_loc_rain_na) <- cs_loc_rain30y_na$REPEAT_PLOT_ID
+cs_loc_rain30y <- rbind(na.omit(cs_loc_rain30y),
+                        cs_loc_rain_na)
 colnames(cs_loc_rain30y) <- "RAIN_8110"
 cs_loc_rain30y <- cbind(as.data.frame(allplot_loc),cs_loc_rain30y)
 cs_loc_rain30y <- cs_loc_rain30y %>%
-  select(-geometry) %>%
-  mutate(RAIN_8110 = ifelse(RAIN_8110 < 9e20, RAIN_8110, NA),
-         Year = recode(YEAR,
-                       "y19" = 2019,
-                       "y07" = 2007,
-                       "y9899" = 1998,
-                       "y90" = 1990,
-                       "y78" = 1978))
+  select(-geometry) 
 
 sum_rain <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_seas-30y_198101-201012.nc"
 rain <- raster::brick(sum_rain)
+rain[rain>9e20] <- NA
 cs_loc_sumrain30y <- raster::extract(rain, allplot_loc)
+rownames(cs_loc_sumrain30y) <- allplot_loc$REPEAT_PLOT_ID
+# for reps that don't fall in the raster get average of all values within 2000m
+cs_loc_sumrain30y_na <- allplot_loc %>%
+  filter(REPEAT_PLOT_ID %in% rownames(cs_loc_sumrain30y)[is.na(cs_loc_sumrain30y[,1])])
+cs_loc_rain_na <- raster::extract(rain, cs_loc_sumrain30y_na,
+                                  fun = mean, buffer = 2000)
+rownames(cs_loc_rain_na) <- cs_loc_sumrain30y_na$REPEAT_PLOT_ID
+cs_loc_sumrain30y <- rbind(na.omit(cs_loc_sumrain30y),
+                           cs_loc_rain_na)
 colnames(cs_loc_sumrain30y) <- c("WIN","SPR","SUM","AUT")
 cs_loc_sumrain30y <- cbind(as.data.frame(allplot_loc),cs_loc_sumrain30y)
 cs_loc_sumrain30y <- cs_loc_sumrain30y %>%
-  select(-geometry) %>%
-  mutate(across(WIN:AUT, function(x) ifelse(x < 9e20,x, NA)),
-         Year = recode(YEAR,
-                       "y19" = 2019,
-                       "y07" = 2007,
-                       "y9899" = 1998,
-                       "y90" = 1990,
-                       "y78" = 1978))
+  select(-geometry) 
 
 cs_rainfall_stats <- full_join(cs_loc_rain30y, cs_loc_sumrain30y) %>%
+  rename(REP_ID = REPEAT_PLOT_ID) %>%
   full_join(mutate(ungroup(cs_survey_rainfall), Year = as.numeric(Year))) %>%
   mutate(rain_diff = mean_rainfall - SUM/3) %>%
-  select(REP_ID, Year, AVER_RAIN_8110 = RAIN_8110, rain_diff)
+  select(REP_ID, Year, AVER_RAIN_8110 = RAIN_8110, rain_diff) 
 
 cs_rainfall_diff <- cs_survey_rainfall %>% ungroup() %>%
   na.omit() %>% filter(Year != 1990) %>%
-  filter(grepl("X", REP_ID)) %>%
   select(Year:mean_rainfall) %>%
   pivot_wider(id_cols = REP_ID, names_from = Year, 
               values_from = mean_rainfall,
               names_prefix = "rain") %>%
   mutate(diff7898 = rain1998 - rain1978,
-         diff9807 = rain2007 - rain1998) %>%
+         diff9807 = rain2007 - rain1998,
+         diff0719 = rain2019 - rain2007) %>%
   select(REP_ID, contains("diff")) %>%
   pivot_longer(contains("diff"), values_to = "fieldseason_rain",
-               names_to = "Time_period", names_prefix = "diff") %>%
+               names_to = "Time_period", names_prefix = "diff",
+               values_drop_na = TRUE) %>%
   mutate(Year = recode(Time_period,
                        "7898" = 1998,
-                       "9807" = 2007)) %>%
-  filter(grepl("X", REP_ID))
+                       "9807" = 2007,
+                       "0719" = 2019)) 
 
 cs_rainfall_averages <-
-  full_join(select(cs_loc_rain30y, REP_ID, Year, AVER_RAIN = RAIN_8110),
-            select(cs_loc_sumrain30y, REP_ID, Year, AVER_SUM_RAIN = SUM))
-  
+  full_join(select(cs_loc_rain30y, REP_ID = REPEAT_PLOT_ID, AVER_RAIN = RAIN_8110),
+            select(cs_loc_sumrain30y, REP_ID = REPEAT_PLOT_ID, AVER_SUM_RAIN = SUM)) 
+
+
 
 # CHESS soil moisture ####
 nc <- ncdf4::nc_open("~/Shapefiles/CHESS/CHESSLandMonHydEn2007.nc")
@@ -1396,47 +921,20 @@ AtmosDep_70 <- full_join(Ndep_cumsum70, Sdep_change70)
 AtmosDep_70_nona <- na.omit(AtmosDep_70)
 
 # merge with CS plots
-# quick check on NAs in plot locations
-table(filter(plot_locations, is.na(E_6_FIG_100M))$E_4_FIG_1KM)
-table(filter(plot_locations, is.na(N_6_FIG_100M))$N_4_FIG_1KM)
-# if there is an NA in the 100m measurement can use the 1km measurement (1km
-# measurements has 0s if there are 100m measurements)
-plot_locs19 <- plot_locations %>%
-  filter(REP_ID %in% VEGETATION_PLOTS_20161819$REP_ID) %>%
-  mutate(YEAR = "y19", ID = NA, E_10_FIG_1M = NA, N_10_FIG_1M = NA,
-         REPEAT_PLOT_ID = NA, OS_8_FIG_10M = NA, OS_6_FIG_100M = NA) %>%
-  group_by(REP_ID) %>%
-  mutate(E_6_FIG_100M = mean(E_6_FIG_100M),
-         N_6_FIG_100M = mean(N_6_FIG_100M)) %>% ungroup() %>%
-  unique() 
-janitor::get_dupes(plot_locs19, REP_ID) #0 dupes
-
 # get habitat information for every plot - if no info use gridavg
-CS_habs <- BH_comb %>% 
+CS_habs <- BH_comb_nodupes %>% 
   mutate(Habitat = ifelse(BH %in% c(1,2), "forest", "moor")) %>%
   mutate(Habitat = replace_na(Habitat, "gridavg")) %>% 
   select(REP_ID, Year, Habitat) %>%
   unique()
-CS_habs_dupes <- janitor::get_dupes(CS_habs, REP_ID, Year) %>%
-  filter(Habitat == "forest") %>% select(-dupe_count)
-CS_habs <- CS_habs %>%
-  filter(!paste0(REP_ID, Year) %in% 
-           paste0(CS_habs_dupes$REP_ID, CS_habs_dupes$Year)) %>%
-  rbind(CS_habs_dupes)
 janitor::get_dupes(CS_habs, REP_ID, Year)
 
 # get locations of every plot
-CS_plot_atdep <- plot_locations %>% 
-  rbind(plot_locs19) %>%
-  mutate(plot_x = ifelse(!is.na(E_6_FIG_100M), E_6_FIG_100M, E_4_FIG_1KM),
-         plot_y = ifelse(!is.na(N_6_FIG_100M), N_6_FIG_100M, N_4_FIG_1KM)) %>%
-  select(plot_x, plot_y, REP_ID, Year = YEAR) %>%
-  mutate(Year = recode(Year, 
-                       "y19" = 2018,
-                       "y07" = 2007,
-                       "y9899" = 1998,
-                       "y90" = 1990,
-                       "y78" = 1978)) %>%
+CS_plot_atdep <- data.frame(REPEAT_PLOT_ID = allplot_loc$REPEAT_PLOT_ID) %>%
+  cbind(st_coordinates(allplot_loc)) %>%
+  left_join(CS_REP_ID_LONG) %>%
+  select(plot_x = X, plot_y = Y, REP_ID = REPEAT_PLOT_ID, Year) %>%
+  mutate(Year = ifelse(Year == 2019, 2018, Year)) %>%
   left_join(CS_habs) %>%
   mutate(Habitat = replace_na(Habitat, "gridavg"))
 
@@ -1451,3 +949,8 @@ for(i in 1:nrow(CS_plot_atdep)) {
 
 CS_plot_atdep <- left_join(CS_plot_atdep, AtmosDep_70_nona)
 summary(CS_plot_atdep)
+
+rm(list=ls(pattern = "Sdep|Ndep|AtmosDep"))
+rm(list=ls(pattern="cs_loc"))
+rm(list=ls(pattern="rain[0-9]{2}$"))
+rm(rain)
