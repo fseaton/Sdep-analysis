@@ -1,5 +1,7 @@
 # Ellenberg R and pH model
 library(brms)
+library(dplyr)
+library(tidyr)
 library(ggplot2)
 theme_set(theme_classic())
 
@@ -189,6 +191,7 @@ ELL_pH <- PH %>%
                        "7898" = 1998,
                        "9807" = 2007,
                        "0719" = 2019)) %>%
+  left_join(PH_QA_diff) %>%
   left_join(BH_comb_nodupes) %>%
   left_join(select(CS_plot_atdep, REP_ID, Year, Ndep, Sdep)) %>%
   left_join(cs_rainfall_diff)
@@ -464,7 +467,7 @@ loo_compare(ell_ph_diffsmuw, ell_phc_diffsmuw)
 
 
 
-
+# Multivariate ####
 # Combine pH and Ellenberg R with original pH and rain differences
 ELL_pH <- PH %>%
   rename_with(~gsub("diff","PH_diff",.x)) %>%
@@ -489,6 +492,7 @@ ELL_pH <- PH %>%
               mutate(Year = ifelse(Year == 2018, 2019, Year))) %>%
   left_join(cs_rainfall_diff) %>%
   left_join(cs_rainfall_averages) %>%
+  left_join(PH_QA_diff) %>%
   left_join(rename(PH_long, Year1 = Year, Year1_pH = pH, 
                    Year1_pHCaCl2 = pH_CaCl2))
 summary(ELL_pH)
@@ -496,7 +500,7 @@ mice::md.pattern(ELL_pH)
 
 # run model with rain differences
 ELL_pH_7807 <- filter(ELL_pH, Year != 2019) %>%
-  select(-PHC, -Year1_pHCaCl2)
+  select(-PHC, -PH_CACL2_SE, -Year1_pHCaCl2)
 janitor::get_dupes(ELL_pH_7807, REP_ID, Time_period)
 mice::md.pattern(ELL_pH_7807)
 
@@ -506,37 +510,37 @@ mod_data <- ELL_pH_7807 %>%
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
          Ell = WH_R_W) %>%
   filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Sdep,fieldseason_rain, Year1_pH, PH) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, Sdep,
+         fieldseason_rain, Year1_pH, PH, PH_DIW_SE) %>%
   mutate(Sdep = as.numeric(scale(Sdep)), 
-         fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
+         fieldseason_rain = as.numeric(scale(fieldseason_rain)),
+         ELL_SE = 0.16) %>%
   na.omit()
-# 1903 obs
+# 1085 obs
 
-get_prior(bf(Ell ~ PH*Year1_pH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+get_prior(bf(Ell | se(ELL_SE, sigma = TRUE) ~ PH*Year1_pH + (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID),
              family = "student") +
-            bf(PH ~ Sdep + fieldseason_rain + (1|SQUARE) +
-                 ar(time = YRnm, gr = REP_ID), family = "student"),
+            bf(PH | se(PH_DIW_SE, sigma = TRUE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                 ar(time = YRnm, gr = REP_ID), family = "student") + 
+            set_rescor(FALSE),
           data = mod_data)
 
 mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
             prior(normal(0,0.5), class = "b", resp = "PH"),
             prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
             prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-            prior(gamma(2,0.1), class = "nu", resp = "Ell"),
-            prior(gamma(2,0.1), class = "nu", resp = "PH"),
-            prior(normal(0.4,0.2), class = "ar", resp = "Ell"),
-            prior(normal(0.4,0.2), class = "ar", resp = "PH"),
-            prior(student_t(3,0,1), class = "sd", resp = "Ell"),
-            prior(student_t(3,0,1), class = "sd", resp = "PH"),
-            prior(student_t(3,0,1), class = "sigma", resp = "Ell"),
-            prior(student_t(3,0,1), class = "sigma", resp = "PH"))
+            prior(gamma(4,1), class = "nu", resp = "Ell"),
+            prior(gamma(4,1), class = "nu", resp = "PH"),
+            prior(normal(2,0.5), class = "ar", resp = "Ell"),
+            prior(normal(2,0.5), class = "ar", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
+            prior(lkj(2), class = "cor", group = "SQUARE"))
 
 # prior predictive check
-prior_mod <- brm(bf(Ell ~ PH*Year1_pH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                    family = "student") +
-                   bf(PH ~ Sdep + fieldseason_rain + (1|SQUARE) + 
-                        ar(time = YRnm, gr = REP_ID), family = "student") +
-                   set_rescor(FALSE), 
+prior_mod <- brm(v, 
                  sample_prior = "only",
                  data = mod_data, prior = mod_pr, cores = 6, iter = 5000)
 summary(prior_mod)
@@ -544,16 +548,16 @@ pp_check(prior_mod, nsamples = 50, resp = "Ell")
 pp_check(prior_mod, nsamples = 50, resp = "PH")
 plot(conditional_effects(prior_mod))
 # underestimates peak at 0 on average but gets close
-
+stancode(prior_mod) # check if what I think is happening is actually happening
 
 # model run
-phell_mod <- brm(bf(Ell ~ PH*Year1_pH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                    family = "student") +
-                   bf(PH ~ Sdep + fieldseason_rain + (1|SQUARE) + 
-                        ar(time = YRnm, gr = REP_ID), family = "student") +
+phell_mod <- brm(bf(Ell | se(ELL_SE, sigma = TRUE) ~ PH*Year1_pH + (1|p|SQUARE) + 
+                      ar(time = YRnm, gr = REP_ID, cov = TRUE), family = "student") +
+                   bf(PH | se(PH_DIW_SE, sigma = TRUE) ~ Sdep + fieldseason_rain + (1|p|SQUARE) + 
+                        ar(time = YRnm, gr = REP_ID, cov = TRUE), family = "student") +
                    set_rescor(FALSE),  save_all_pars = TRUE,
                  data = mod_data, prior = mod_pr, cores = 6, iter = 5000,
-                 file = "Outputs/Models/Difference/Ell_PH_multi_pHint_Sdepfieldrain")
+                 file = "Outputs/Models/Difference/WH_R_W/Ell_PH_multi_pHint_Sdepfieldrain")
 summary(phell_mod)
 plot(phell_mod)
 pp_check(phell_mod, nsamples = 50, resp = "Ell")
