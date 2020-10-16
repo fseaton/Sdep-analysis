@@ -65,6 +65,15 @@ CS78_PH <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS1978_PH_LOI_DATA"))
 CS98_PH <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS1998_PH_LOI_DATA"))
 UK19_PH <- read.csv("Outputs/UK19_PHLOI.csv")
 
+
+# Total C and N data ####
+UK19_CN <- read_excel("Outputs/UKSCAPE Field Survey 2019 CHEMICAL DARv5.xls",
+                      sheet = "DATA clean", na = c("","NA",-9999)) %>%
+  select(SQUARE = `Square number`, X_PLOT =  `X plot`, 
+         C_PERCENT = `C-total (%)...25`, N_PERCENT = `N-total(%)`,
+         CN_RATIO = `C:N_ratio`) %>%
+  mutate(REP_ID = paste0(SQUARE, X_PLOT)) %>% select(-X_PLOT)
+GM16_CN <- dbReadTable(channelg, SQL("GMEP_SOILS.LANC_CHEM"))
 CS07_CN <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS2007_CN_DATA"))
 CS98_CN <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS1998_CN_DATA"))
 

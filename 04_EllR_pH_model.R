@@ -148,7 +148,7 @@ Ell_R <- X_Ell %>%
          WH_R_W_diff9819 = WH_R_W_2019 - WH_R_W_1998,
   )
 mice::md.pattern(select(Ell_R, contains("diff")))
-# 39 missing 1998 but having 2007/1978, 23 missing 2007 but 
+# 33 missing 1998 but having 2007/1978, 4 missing 2007 but 
 # having 2019 and 1998 - this seems fine to me to just use the 78/98, 
 # 98/07 and 07/19 changes
 
@@ -194,7 +194,8 @@ ELL_pH <- PH %>%
   left_join(PH_QA_diff) %>%
   left_join(BH_comb_nodupes) %>%
   left_join(select(CS_plot_atdep, REP_ID, Year, Ndep, Sdep)) %>%
-  left_join(cs_rainfall_diff)
+  left_join(cs_rainfall_diff) %>%
+  left_join(CN)
 
 
 janitor::get_dupes(ELL_pH, Time_period, REP_ID) # no duplicates
@@ -494,7 +495,8 @@ ELL_pH <- PH %>%
   left_join(cs_rainfall_averages) %>%
   left_join(PH_QA_diff) %>%
   left_join(rename(PH_long, Year1 = Year, Year1_pH = pH, 
-                   Year1_pHCaCl2 = pH_CaCl2))
+                   Year1_pHCaCl2 = pH_CaCl2)) %>%
+  left_join(CN)
 summary(ELL_pH)
 mice::md.pattern(ELL_pH)
 
@@ -508,21 +510,29 @@ mice::md.pattern(ELL_pH_7807)
 mod_data <- ELL_pH_7807 %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_W) %>%
-  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Sdep,
-         fieldseason_rain, Year1_pH, PH, PH_DIW_SE) %>%
+         Ell = WH_R_W,
+         Habitat = ifelse(BH %in% c(7,8,9,10,11,12,15,16,23), "Semi-natural",
+                          ifelse(BH %in% c(3,4,5,6), "Improved",
+                                 ifelse(BH %in% c(1,2), "Woodland",NA)))) %>%
+  # filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
+  filter(!is.na(Habitat)) %>%
+  select(REP_ID, SQUARE, YRnm, Habitat, Ell, Sdep, Ndep,
+         fieldseason_rain, Year1_pH, PH, PH_DIW_SE, 
+         N = N_PERCENT, C = C_PERCENT) %>%
   mutate(Sdep = as.numeric(scale(Sdep)), 
+         Ndep = as.numeric(scale(Ndep)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain)),
-         ELL_SE = 0.16) %>%
+         ELL_SE = 0.16,
+         C = as.numeric(scale(log(C))),
+         N = log(N)) %>%
   na.omit()
 # 1085 obs
 
-get_prior(bf(Ell | se(ELL_SE, sigma = TRUE) ~ PH*Year1_pH + (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID),
+get_prior(bf(Ell | se(ELL_SE, sigma = TRUE) ~ me(PH,PH_DIW_SE,YRnm)*Year1_pH + (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID),
              family = "student") +
             bf(PH | se(PH_DIW_SE, sigma = TRUE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
                  ar(time = YRnm, gr = REP_ID), family = "student") + 
-            set_rescor(FALSE),
+            set_rescor(FALSE) + set_mecor(FALSE),
           data = mod_data)
 
 mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
@@ -549,6 +559,55 @@ pp_check(prior_mod, nsamples = 50, resp = "PH")
 plot(conditional_effects(prior_mod))
 # underestimates peak at 0 on average but gets close
 stancode(prior_mod) # check if what I think is happening is actually happening
+
+# missing data model
+make_stancode(bf(Ell | mi(ELL_SE) ~ mi(PH)*Year1_pH + (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID),
+                 family = "student") +
+                bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                     ar(time = YRnm, gr = REP_ID), family = "student") + 
+                set_rescor(FALSE),
+              data = mod_data)
+
+mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+            prior(normal(0,0.5), class = "b", resp = "PH"),
+            prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+            prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+            prior(gamma(3,1), class = "nu", resp = "Ell"),
+            prior(gamma(3,1), class = "nu", resp = "PH"),
+            prior(normal(2,0.5), class = "ar", resp = "Ell"),
+            prior(normal(2,0.5), class = "ar", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
+            prior(lkj(2), class = "cor", group = "SQUARE"),
+            prior(normal(0,1), class = "meanme", resp = "Ell"),
+            prior(normal(0,1), class = "meanme", resp = "PH"),
+            prior(student_t(3,0,3), class = "sdme", resp = "Ell"),
+            prior(student_t(3,0,3), class = "sdme", resp = "PH"))
+
+# prior predictive check
+prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH)*Year1_pH + (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID),
+                    family = "student") +
+                   bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID), family = "student") + 
+                   set_rescor(FALSE),
+                 sample_prior = "only", save_all_pars = TRUE, save_mevars = TRUE,
+                 data = mod_data, prior = mod_pr, cores = 6, iter = 5000)
+summary(prior_mod)
+pp_check(prior_mod, nsamples = 50, resp = "Ell")
+pp_check(prior_mod, nsamples = 50, resp = "PH")
+plot(conditional_effects(prior_mod))
+# underestimates peak at 0 on average but gets close
+stancode(prior_mod) # check if what I think is happening is actually happening
+
+get_prior(bf(Ell | mi(ELL_SE) ~ mi(PH)*Year1_pH + (1|p|SQUARE),
+             family = "student") +
+            bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE), 
+               family = "student") + 
+            set_rescor(FALSE),
+          data = mod_data)
+
 
 # model run
 phell_mod <- brm(bf(Ell | se(ELL_SE, sigma = TRUE) ~ PH*Year1_pH + (1|p|SQUARE) + 
@@ -712,3 +771,272 @@ loo_compare(phell_mod_noint, phell_mod_noint_sdep, phell_mod_noint_rain)
 
 # So Sdep and field season rainfall differences do not impact Ellenberg R
 # directly (for whole plot weighted score)
+
+
+
+# Multivariate with N #### 
+
+# Cannot have mi notation or autoregressive component using brms notation in a
+# non-linear model
+get_prior(bf(Ell | mi(ELL_SE) ~ Inter + b1*mi(PH) + b2*step(Year1_pH - phthreshold)*N,
+             b1 + b2 + phthreshold ~ 1,Inter ~ (1|p|SQUARE),# + ar(time = YRnm, gr = REP_ID),
+             nl = TRUE, family = "student") +
+            bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                 ar(time = YRnm, gr = REP_ID), family = "student") + 
+            bf(N ~ Ndep + (1|p|SQUARE) +
+                 ar(time = YRnm, gr = REP_ID)) +
+            set_rescor(FALSE), data = mod_data)
+
+mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "N"),
+            prior(normal(0,0.5), class = "b", resp = "PH"),
+            prior(normal(0,0.25), class = "Intercept", resp = "N"),
+            prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+            prior(gamma(3,1), class = "nu", resp = "Ell"),
+            prior(gamma(3,1), class = "nu", resp = "PH"),
+            prior(normal(2,0.5), class = "ar", resp = "N"),
+            prior(normal(2,0.5), class = "ar", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "Ell", nlpar = "Inter"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
+            prior(lkj(2), class = "cor", group = "SQUARE"),
+            prior(normal(0,1), class = "meanme", resp = "Ell"),
+            prior(normal(0,1), class = "meanme", resp = "PH"),
+            prior(student_t(3,0,3), class = "sdme", resp = "Ell"),
+            prior(student_t(3,0,3), class = "sdme", resp = "PH"),
+            prior(normal(0,0.5),nlpar = "b1", resp= "Ell"),
+            prior(normal(0,0.5),nlpar = "b2", resp = "Ell"),
+            prior(normal(0,0.5),nlpar = "Inter", resp = "Ell"),
+            prior(normal(5.5,0.1),nlpar = "phthreshold", resp = "Ell"))
+make_stancode(bf(Ell | mi(ELL_SE) ~ Inter + b1*mi(PH) + b2*step(mi(PH) + Year1_pH - phthreshold)*N,
+                 b1 + b2 + phthreshold ~ 1,Inter ~ (1|p|SQUARE),# + ar(time = YRnm, gr = REP_ID),
+                 nl = TRUE, family = "student") +
+                bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                     ar(time = YRnm, gr = REP_ID), family = "student") + 
+                bf(N  ~ Ndep + (1|p|SQUARE) +
+                     ar(time = YRnm, gr = REP_ID), family = "student") +
+                set_rescor(FALSE), data = mod_data, prior = mod_pr)
+# doesn't work, would have to edit stan code myself 
+
+# Multivariate with N as a 2D spline
+# Cannot have mi notation within spline
+get_prior(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Year1_pH, N) + (1|p|SQUARE) +
+               ar(time = YRnm, gr = REP_ID),
+             family = "student") +
+            bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                 ar(time = YRnm, gr = REP_ID), family = "student") + 
+            bf(N ~ Ndep + C + (1|p|SQUARE) +
+                 ar(time = YRnm, gr = REP_ID)) +
+            set_rescor(FALSE), data = mod_data)
+
+
+mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+            prior(normal(0,0.5), class = "b", resp = "PH"),
+            prior(normal(0,0.5), class = "b", resp = "N"),
+            prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
+            prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+            prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+            prior(student_t(3,0,1), class = "Intercept", resp = "N"),
+            prior(gamma(4,1), class = "nu", resp = "Ell"),
+            prior(gamma(4,1), class = "nu", resp = "PH"),
+            prior(normal(0,0.5), class = "ar", resp = "Ell"),
+            prior(normal(0,0.5), class = "ar", resp = "PH"),
+            prior(normal(0,0.5), class = "ar", resp = "N"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "N"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "N"),
+            prior(lkj(2), class = "cor", group = "SQUARE"))
+make_stancode(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Year1_pH, N) + (1|p|SQUARE) +
+                   ar(time = YRnm, gr = REP_ID),
+                 family = "student") +
+                bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                     ar(time = YRnm, gr = REP_ID), family = "student") + 
+                bf(N ~ Ndep + C + (1|p|SQUARE) +
+                     ar(time = YRnm, gr = REP_ID)) +
+                set_rescor(FALSE), data = mod_data, prior = mod_pr)
+
+# prior simulation
+prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Year1_pH, N) + (1|p|SQUARE) +
+                      ar(time = YRnm, gr = REP_ID),
+                    family = "student") +
+                   bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID), family = "student") + 
+                   bf(N ~ Ndep + C + (1|p|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID)) +
+                   set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                 sample_prior = "only", save_pars = save_pars(all = TRUE, latent = TRUE), 
+                 cores = 6, iter = 5000)
+summary(prior_mod)
+pp_check(prior_mod, nsamples = 50, resp = "Ell")
+pp_check(prior_mod, nsamples = 50, resp = "PH")
+plot(conditional_effects(prior_mod))
+
+# randomly pick 300 rows and run model to see what happens
+mod_data2 <- mod_data[sample.int(nrow(mod_data),300),]
+full_mod <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(N, Year1_pH) + (1|p|SQUARE) +
+                     ar(time = YRnm, gr = REP_ID),
+                   family = "student") +
+                  bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                       ar(time = YRnm, gr = REP_ID), family = "student") + 
+                  bf(N ~ Ndep + C + (1|p|SQUARE) +
+                       ar(time = YRnm, gr = REP_ID)) +
+                  set_rescor(FALSE), data = mod_data2, prior = mod_pr,
+                save_pars = save_pars(all = TRUE, latent = TRUE), 
+                cores = 6, iter = 5000)
+summary(full_mod)
+pp_check(full_mod, nsamples = 50, resp = "Ell")
+pp_check(full_mod, nsamples = 50, resp = "PH")
+pp_check(full_mod, nsamples = 50, resp = "N")
+
+plot(conditional_effects(full_mod))
+
+# check where 6 divergent transitions are
+mypars <- colnames(as.matrix(full_mod))
+pairs(full_mod$fit, pars = grep("^b_|^sigma_|^nu_", mypars, value = TRUE))
+# lower triangle so upping adapt delta should fix it
+
+
+# Habitat interaction
+mod_data <- mutate(mod_data, Improved = ifelse(Habitat == "Improved",1,0))
+get_prior(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, N, Improved) + 
+               (1|p|SQUARE) +
+               ar(time = YRnm, gr = REP_ID),
+             family = "student") +
+            bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+                 ar(time = YRnm, gr = REP_ID), family = "student") + 
+            bf(N ~ Ndep + C + (1|p|SQUARE) +
+                 ar(time = YRnm, gr = REP_ID)) +
+            set_rescor(FALSE), data = mod_data)
+
+
+mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+            prior(normal(0,0.5), class = "b", resp = "PH"),
+            prior(normal(0,0.5), class = "b", resp = "N"),
+            prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
+            prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+            prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+            prior(student_t(3,0,1), class = "Intercept", resp = "N"),
+            prior(gamma(4,1), class = "nu", resp = "Ell"),
+            prior(gamma(4,1), class = "nu", resp = "PH"),
+            prior(normal(0,0.2), class = "ar", resp = "Ell"),
+            prior(normal(0,0.2), class = "ar", resp = "PH"),
+            prior(normal(0,0.2), class = "ar", resp = "N"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "N"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
+
+
+# prior simulation
+prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, N, Improved) + 
+                      (1|SQUARE) +
+                      ar(time = YRnm, gr = REP_ID),
+                    family = "student") +
+                   bf(PH | mi(PH_DIW_SE)  ~ Improved*Sdep + fieldseason_rain + (1|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID), family = "student") + 
+                   bf(N ~ Ndep + C + (1|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID)) +
+                   set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                 sample_prior = "only", save_pars = save_pars(all = TRUE, latent = TRUE), 
+                 cores = 4, iter = 5000)
+summary(prior_mod)
+pp_check(prior_mod, nsamples = 50, resp = "Ell")
+pp_check(prior_mod, nsamples = 50, resp = "PH")
+plot(conditional_effects(prior_mod))
+
+# randomly pick 300 rows and run model to see what happens
+mod_data2 <- mod_data[sample.int(nrow(mod_data),300),]
+full_mod <- brm(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, N, Improved) + 
+                     (1|p|SQUARE) +
+                     ar(time = YRnm, gr = REP_ID),
+                   family = "student") +
+                  bf(PH | mi(PH_DIW_SE)  ~ Improved*Sdep + fieldseason_rain + (1|p|SQUARE) +
+                       ar(time = YRnm, gr = REP_ID), family = "student") + 
+                  bf(N ~ Ndep + C + (1|p|SQUARE) +
+                       ar(time = YRnm, gr = REP_ID)) +
+                  set_rescor(FALSE), data = mod_data2, prior = mod_pr,
+                save_pars = save_pars(all = TRUE, latent = TRUE), 
+                cores = 6, iter = 10000, control = list(adapt_delta = 0.99))
+summary(full_mod)
+pp_check(full_mod, nsamples = 50, resp = "Ell")
+pp_check(full_mod, nsamples = 50, resp = "PH")
+pp_check(full_mod, nsamples = 50, resp = "N")
+
+plot(conditional_effects(full_mod))
+
+
+# simulate data according to model and check if works 
+set.seed(151020)
+sim_data <- data.frame(SQUARE = gl(100,5)) %>%
+  mutate(REP_ID = paste0(SQUARE,"X",1:500),    
+         Improved = rbinom(500,1,0.007*as.numeric(SQUARE))) %>%
+  mutate(pH = rnorm(500,mean = 4.5 + Improved + rep(rnorm(100,0,0.5),each = 5), 1)) %>%
+  mutate(Ell = rnorm(500, mean = pH + rep(rnorm(100,0,1),each = 5), 1)) %>%
+  mutate(logC_year1 = rnorm(500, rep(rnorm(100,0,0.2),each = 5), 1)) %>%
+  mutate(logN_year1 = rnorm(500, logC_year1, 0.02)) %>%
+  mutate(Sdep = rep(rnorm(100,0,1),each = 5)) %>%
+  mutate(Ndep = rep(rnorm(100,-Sdep,1),each = 5)) %>%
+  mutate(rain_year2 = rep(rnorm(100,0,1),each = 5),
+         pHSE_year1 = 0.2,
+         EllSE_year1 = 0.15 + Improved*0.05) %>%
+  # mutate(test = 0.5*Improved+(1-Improved)*0.5*Sdep + 0.3*rain)
+  mutate(pH_diffYear2 = rstudent_t(500, 4,
+                                   0.5*Improved+(1-Improved)*0.5*Sdep + 
+                                           0.3*rain_year2,pHSE_year1))%>%
+  mutate(Ell_diffYear2 = rstudent_t(500, 4,
+                                   pH_diffYear2*(1-Improved) + 
+                                           Improved*0.5*pH_diffYear2 + 
+                                           (pH>5.5)*-0.5*logN_year1,EllSE_year1)) %>%
+  mutate(pH_year2 = pH + pH_diffYear2,
+         pHSE_year2 = 0.15,
+         Ell_year2 = Ell + Ell_diffYear2,
+         EllSE_year2 = 0.2 + Improved*0.05,
+         logN_year2 = logN_year1 + rnorm(500,0.5*(2+Ndep),0.2),
+         logC_year2 = logC_year1 + rnorm(500,0,0.2),
+         rain_year3 = rep(rnorm(100,0,1),each = 5)) %>%
+  mutate(pH_diffYear3 = rstudent_t(500, 4,
+                                   0.5*Improved+(1-Improved)*0.5*Sdep + 
+                                           0.3*rain_year3, pHSE_year2)) %>%
+  mutate(Ell_diffYear3 = rstudent_t(500, 4,
+                                    pH_diffYear3*(1-Improved) + 
+                                            Improved*0.5*pH_diffYear3 + 
+                                            (pH_year2>5.5)*-0.5*logN_year2,EllSE_year2)) %>%
+  select(SQUARE, REP_ID, Sdep, Ndep, Improved,
+         rain_year12 = rain_year2,rain_year23 = rain_year3,
+         C_year12 = logC_year1, C_year23 = logC_year2,
+         N_year12 = logN_year1, N_year23 = logN_year2,
+         PH_DIW_SE_year12 = pHSE_year1, PH_DIW_SE_year23 = pHSE_year2,
+         ELL_SE_year12 = EllSE_year1, ELL_SE_year23 = EllSE_year2,
+         PH_year12 = pH_diffYear2, PH_year23 = pH_diffYear3,
+         Year1_pH_year12 = pH, Year1_pH_year23 = pH_year2,
+         Ell_year12 = Ell_diffYear2,Ell_year23 = Ell_diffYear3) %>%
+  pivot_longer(contains("_year"), names_to = c("Variable","Time_period"),
+               names_sep = "_year") %>%
+  pivot_wider(names_from = Variable, values_from = value) %>%
+  mutate(YRnm = as.numeric(as.factor(Time_period)))
+psych::multi.hist(select_if(sim_data, is.numeric))
+psych::pairs.panels(select_if(sim_data, is.numeric), rug = FALSE)
+
+
+sim_mod <- brm(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, N, Improved) + 
+                     (1|SQUARE) +
+                     ar(time = YRnm, gr = REP_ID),
+                   family = "student") +
+                  bf(PH | mi(PH_DIW_SE)  ~ Improved*Sdep + rain + (1|SQUARE) +
+                       ar(time = YRnm, gr = REP_ID), family = "student") + 
+                  bf(N ~ Ndep + C + (1|SQUARE) +
+                       ar(time = YRnm, gr = REP_ID)) +
+                  set_rescor(FALSE), data = sim_data, prior = mod_pr,
+                save_pars = save_pars(all = TRUE, latent = TRUE), 
+                cores = 4, iter = 4000)
+summary(sim_mod)
+pp_check(sim_mod, nsamples = 50, resp = "Ell")
+pp_check(sim_mod, nsamples = 50, resp = "PH")
+pp_check(sim_mod, nsamples = 50, resp = "N")
+
+plot(conditional_effects(sim_mod))

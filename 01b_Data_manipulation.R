@@ -29,16 +29,19 @@ CS16_PH$REP_ID <- paste(CS16_PH$SQUARE_NUM,CS16_PH$REP_NUM, sep = "X")
 Soil_missingreps78 <- CS78_PH$REP_ID[!CS78_PH$REP_ID %in% CS_REPEAT_PLOTS$Y78]
 Soil_missingreps98 <- CS98_PH$REP_ID[!CS98_PH$REP_ID %in% CS_REPEAT_PLOTS$Y9899]
 Soil_missingreps07 <- CS07_PH$REP_ID[!CS07_PH$REP_ID %in% CS_REPEAT_PLOTS$Y07]
+Soil_missingreps19 <- UK19_PH$REP_ID[!UK19_PH$REP_ID %in% CS_REPEAT_PLOTS$Y161819]
 
 # now correct repeat plots for 2019 data and missing soils plots
 CS_REP_ID <- CS_REPEAT_PLOTS %>% #filter(CS_REPEAT_PLOTS, AMALG_PTYPE == "X") %>%
-  mutate(Y07 = ifelse(!is.na(Y07), Y07,
+  mutate(Y19 = ifelse(!is.na(Y161819), Y161819,
+                      ifelse(Y07 %in% Soil_missingreps19, Y07, NA)),
+         Y07 = ifelse(!is.na(Y07), Y07,
                       ifelse(Y9899 %in% Soil_missingreps07, Y9899, NA)),
          Y78 = ifelse(!is.na(Y78), Y78, 
                       ifelse(Y90 %in% Soil_missingreps78, Y90, NA)),
          Y9899 = ifelse(!is.na(Y9899), Y9899,
                         ifelse(Y90 %in% Soil_missingreps98, Y90, NA))) %>%
-  mutate(Y19 = Y07)
+  select(-Y161819, -REP_ID)
 
 CS_REP_ID_LONG <- CS_REP_ID %>%
   select(REPEAT_PLOT_ID, Y78:Y19) %>%
@@ -386,6 +389,62 @@ MOISTURE <- CS_tier4 %>%
   mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
   select(-REPEAT_PLOT_ID)
 
+# Nitrogen ####
+str(GM16_CN)
+str(VEGETATION_PLOTS_20161819)
+
+CS16_CN <- GM16_CN %>%
+  select(SQNUM:C_FE_NTOTAL) %>%
+  rename_with(~gsub("C_FE_","",.x)) %>%
+  inner_join(filter(VEGETATION_PLOTS_20161819, !is.na(GMEP_SQ)) %>%
+               select(SQUARE, SQNUM = GMEP_SQ, PLOTYEAR) %>% unique()) %>%
+  mutate(REP_ID = paste(SQUARE, PLOTNUM, sep = "X"),
+         Year = 2016,
+         CN_RATIO = CTOTAL/NTOTAL) %>%
+  select(REP_ID, SQUARE, Year = PLOTYEAR, 
+         N_PERCENT = NTOTAL, C_PERCENT = CTOTAL, CN_RATIO) %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
+
+str(UK19_CN)
+CS19_CN <- UK19_CN %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID) %>%
+  mutate(Year = 2019)
+  
+CS07_CN <- CS07_CN %>%
+  select(SQUARE = SQUARE_NUM, REP_ID = REP_ID07,
+         C_PERCENT, N_PERCENT) %>%
+  mutate(CN_RATIO = C_PERCENT/N_PERCENT) %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID) %>%
+  mutate(Year = 2007)
+
+CS98_CN <- CS98_CN %>%
+  mutate(REP_ID = paste0(SQUARE_NUM, PLOT_TYPE, REP_NUM)) %>%
+  select(SQUARE = SQUARE_NUM, REP_ID,
+         C_PERCENT, N_PERCENT, CN_RATIO) %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y9899)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID) %>%
+  mutate(Year = 1998)
+
+
+CN <- full_join(CS98_CN, CS07_CN) %>%
+  full_join(CS16_CN) %>%
+  full_join(CS19_CN) %>%
+  select(-SQUARE) %>%
+  # one measurement at limit so removing
+  mutate(N_PERCENT = ifelse(N_PERCENT <= 0.02, NA, N_PERCENT),
+         CN_RATIO = ifelse(N_PERCENT <= 0.02, NA, CN_RATIO))
+summary(CN)
+hist(CN$N_PERCENT)
+# N percent is a bimodally distributed variable with peak one being roughly
+# equivalent to a beta distribution with mean 0.005 and variance 1000, and peak
+# 2 having mean 0.02 and variance 600 (give or take a lot on the variance)
 
 # Spatial data manipulation ####
 # rainfall - monthly totals ####
@@ -936,7 +995,8 @@ CS_plot_atdep <- data.frame(REPEAT_PLOT_ID = allplot_loc$REPEAT_PLOT_ID) %>%
   select(plot_x = X, plot_y = Y, REP_ID = REPEAT_PLOT_ID, Year) %>%
   mutate(Year = ifelse(Year == 2019, 2018, Year)) %>%
   left_join(CS_habs) %>%
-  mutate(Habitat = replace_na(Habitat, "gridavg"))
+  mutate(Habitat = replace_na(Habitat, "gridavg"),
+         x = NA, y = NA)
 
 # match to atmospheric deposition data
 dep_x <- AtmosDep_70_nona$x
