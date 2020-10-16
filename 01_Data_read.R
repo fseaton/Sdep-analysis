@@ -1,6 +1,7 @@
 # Code for reading in data 
 library(data.table)
 library(readxl)
+library(dplyr)
 
 # atmospheric deposition data
 Sdep_avg <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_gridavg_1970-2018_5km_kgS_ha.csv")
@@ -48,11 +49,18 @@ CS98_PLOTS <- dbReadTable(FEGEN, SQL("CSVEG.CS9899_QUADS_DESCRIPTION"))
 CS90_PLOTS <- dbReadTable(FEGEN, SQL("CSVEG.CS90_QUADS_DESCRIPTION"))
 CS78_PLOTS <- dbReadTable(FEGEN, SQL("CSVEG.CS78_QUADS_DESCRIPTION"))
 
-# plant QA
-CSVEG_QA <- read.csv("Outputs/qa_cs_x_gb_9098071619.csv")
+# Repeat plot IDs
+CS_REPEAT_PLOTS <- read.csv("Outputs/REPEAT_PLOTS_v4.csv")
 
-CS_REPEAT_PLOTS <- dbReadTable(FEGEN, SQL("CSVEG.CS_REPEAT_PLOTS"))
-CS_REPEAT_PLOTS_LONG <- dbReadTable(FEGEN, SQL("CSVEG.CS_REPEAT_PLOTS_TRANSPOSED"))
+# plant QA
+CS_VEG_QA <- haven::read_sas("Outputs/qa_cs_all_yrs.sas7bdat") %>%
+  haven::zap_formats()
+CS98_VEG_QA <- haven::read_sas("Outputs/cs9899_speciesdata.sas7bdat") %>%
+  haven::zap_formats()
+CS16_VEG_QA <- haven::read_sas("Outputs/qa_2016_all_species_data.sas7bdat") %>%
+  haven::zap_formats()
+CS19_VEG_QA <- haven::read_sas("Outputs/qa_2019_species_data.sas7bdat") %>%
+  haven::zap_formats()
 
 # soils data
 MWA_masq <- dbConnect(odbc(), "MWA", UID="masq", 

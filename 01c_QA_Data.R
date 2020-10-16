@@ -1,39 +1,154 @@
 # Script for QA analysis for Ellenberg R and soil pH
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+theme_set(theme_bw())
 
 # Ellenberg QA data ####
 # Only doing this for Ellenberg R right now
+# for small plot calculations can also include Y and U plots (both 4m2)
 str(CSVEG_QA)
 
-X_Ell_whole_QA <- CSVEG_QA %>%
+CS16_VEG_QA2 <- CS16_VEG_QA %>%
+  mutate(REP_ID = substring(Quadrat,2)) %>%
+  mutate(PLOT_TYPE = gsub("[0-9]","",REP_ID)) %>%
+  filter(PLOT_TYPE %in% c("X","Y","U")) %>%
+  left_join(select(VEGETATION_PLOTS_20161819, REP_ID = REP_ID_NEW,
+                   CS_REP_ID = REP_ID)) %>%
+  select(-REP_ID) %>%
+  select(REP_ID = CS_REP_ID, PLOT_TYPE, BRC_NUMBER = Names, COVER = Cover,
+         Surveyor = SURVEY) %>%
+  mutate(Year = 2019,
+         Surveyor = recode(Surveyor, 
+                           "SV" = "CS"))
+
+CS_VEG_QA2 <- CS_VEG_QA %>% 
+  mutate(REP_ID = paste0(Square, Plot_Type, Plot_number)) %>%
+  filter(Plot_Type %in% c("X","Y","U")) %>%
+  select(REP_ID, Year, PLOT_TYPE = Plot_Type,
+         BRC_NUMBER, COVER = Value, Surveyor)
+  
+
+X_Ell_QA_whole <- CS19_VEG_QA %>%
+  filter(Surveyor == "QA") %>%
+  select(REP_ID, PLOT_TYPE, BRC_NUMBER, COVER = TOTAL_NUM) %>%
+  mutate(Year = 2019, Surveyor = "QA") %>%
+  full_join(CS16_VEG_QA2) %>%
+  full_join(CS_VEG_QA2) %>%
+  filter(PLOT_TYPE == "X") %>%
   left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
                    EBERGR)) %>%
   mutate(across(EBERGR, na_if, y = 0)) %>% # set 0 values to NA
-  group_by(Year, Surveyor, REP_ID) %>%
-  summarise(across(EBERGR, mean, na.rm = TRUE)) %>%
-  rename_with(~gsub("EBERG","WH_",.x)) %>%
-  mutate_all(function(x) ifelse(!is.nan(x), x, NA)) %>%
-  pivot_wider(names_from = "Surveyor", values_from = "WH_R") %>%
-  mutate(WH_UW_diff = CS - QA)
+  filter(!is.na(EBERGR)) %>%
+  group_by(REP_ID, Year, Surveyor) %>%
+  summarise(across(EBERGR, 
+                   .fns = list(R_UW = ~mean(.x, na.rm = TRUE),
+                               R_W = ~weighted.mean(.x, w = COVER, na.rm = TRUE)))) %>%
+  rename_with(~gsub("EBERGR","WH",.x)) %>%
+  mutate_all(function(x) ifelse(!is.nan(x), x, NA))
 
-ggplot(X_Ell_whole_QA, aes(x = CS, y = QA, colour = Year)) + 
+X_Ell_QA_inner <- CS19_VEG_QA %>%
+  filter(Surveyor == "QA" & NEST_LEVEL < 2) %>%
+  select(REP_ID, PLOT_TYPE, BRC_NUMBER, COVER = FIRST_COVER) %>%
+  mutate(Year = 2019, Surveyor = "QA") %>%
+  full_join(filter(CS16_VEG_QA2, PLOT_TYPE %in% c("Y","U"))) %>%
+  full_join(filter(CS_VEG_QA2, PLOT_TYPE %in% c("Y","U"))) %>%
+  left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
+                   EBERGR)) %>%
+  mutate(across(EBERGR, na_if, y = 0)) %>% # set 0 values to NA
+  filter(!is.na(EBERGR)) %>%
+  group_by(REP_ID, Year, Surveyor) %>%
+  summarise(across(EBERGR, 
+                   .fns = list(R_UW = ~mean(.x, na.rm = TRUE),
+                               R_W = ~weighted.mean(.x, w = COVER, na.rm = TRUE)))) %>%
+  rename_with(~gsub("EBERGR","SM",.x)) %>%
+  mutate_all(function(x) ifelse(!is.nan(x), x, NA))
+
+X_Ell_QA <- full_join(X_Ell_QA_inner, X_Ell_QA_whole) %>%
+  left_join(CS_REP_ID_LONG) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID) %>%
+  left_join(select(X_Ell, REP_ID, Year,
+                   SM_R_W, SM_R_UW,WH_R_W,WH_R_UW) %>%
+              filter(Year == 2019) %>%
+              mutate(Surveyor = "CS")) %>%
+  pivot_longer(contains("_R_"), 
+               names_to = c("PlotSize","Ellenberg","Weighting"),
+               names_sep = "_", values_to = "score") %>%
+  filter(!is.na(score)) %>%
+  pivot_wider(names_from = "Surveyor", values_from = "score") %>%
+  mutate(Diff = QA - CS)
+
+
+ggplot(X_Ell_QA, aes(x = CS, y = QA, colour = Year)) + 
   geom_point() +
-  geom_abline(slope = 1, intercept = 0)
+  geom_abline(slope = 1, intercept = 0) +
+  facet_grid(PlotSize ~ Weighting)
 
-EllR_diff <- na.omit(X_Ell_whole_QA$WH_UW_diff)
+ggplot(X_Ell_QA, aes(x = Diff)) + 
+  geom_histogram() +
+  facet_wrap(~Year + PlotSize + Weighting)
 
-X_Ell_whole_QA %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
-  group_by(Year) %>%
+
+janitor::tabyl(X_Ell_QA, Year, PlotSize, Weighting)
+# $UW
+# Year SM WH
+# 1990 39 44
+# 1998 51 39
+# 2007 63 52
+# 2019 43 43
+# 
+# $W
+# Year SM WH
+# 1990 39 44
+# 1998 51 39
+# 2007 63 52
+# 2019 43 43
+
+X_Ell_QA %>% 
+  # mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
+  group_by(Year, PlotSize, Weighting) %>%
   na.omit() %>%
-  summarise(mu = MASS::fitdistr(WH_UW_diff,"t")$estimate[1],
-            sd = MASS::fitdistr(WH_UW_diff,"t")$estimate[2],
-            df = MASS::fitdistr(WH_UW_diff,"t")$estimate[3])
-# Year      mu    sd    df
-# <dbl>   <dbl> <dbl> <dbl>
-# 1  1990 0.00775 0.121  2.58
-# 2  1998 0.103   0.169  6.95
-# 3  2007 0.0111  0.164  4.08
-# 4  2019 0.0169  0.150  5.25
+  summarise(mu = MASS::fitdistr(Diff,"t", 
+                                start = list(m = 0, s = 0.2, df = 5),
+                                lower=c(-1, 0.001,1))$estimate[1],
+            sd = MASS::fitdistr(Diff,"t", 
+                                start = list(m = 0, s = 0.2, df = 5),
+                                lower=c(-1, 0.001,1))$estimate[2],
+            df = MASS::fitdistr(Diff,"t", 
+                                start = list(m = 0, s = 0.2, df = 5),
+                                lower=c(-1, 0.001,1))$estimate[3])
+# PlotSize Weighting      mu    sd    df
+# <chr>    <chr>       <dbl> <dbl> <dbl>
+# 1 SM       UW         0.0452 0.256  4.07
+# 2 SM       W          0.0373 0.378  6.64
+# 3 WH       UW        -0.0388 0.128  5.50
+# 4 WH       W         -0.0714 0.298 29.9 
+
+X_Ell_QA_hab <- left_join(X_Ell_QA, BH_comb_nodupes)
+table(X_Ell_QA_hab$BH_DESC)
+
+
+
+X_Ell_QA_hab <- filter(X_Ell_QA_hab,
+                       BH %in% c(1,5,6,7,8,9,10,11,12)) %>%
+  mutate(Improved = ifelse(BH %in% c(5,6),1,0))
+
+janitor::tabyl(X_Ell_QA_hab, Year, PlotSize, Improved)
+X_Ell_QA_hab %>% 
+  group_by(Year, PlotSize, Weighting) %>%
+  na.omit() %>%
+  summarise(mu = MASS::fitdistr(Diff,"t", 
+                                start = list(m = 0, s = 0.2, df = 5),
+                                lower=c(-1, 0.001,1))$estimate[1],
+            sd = MASS::fitdistr(Diff,"t", 
+                                start = list(m = 0, s = 0.2, df = 5),
+                                lower=c(-1, 0.001,1))$estimate[2],
+            df = MASS::fitdistr(Diff,"t", 
+                                start = list(m = 0, s = 0.2, df = 5),
+                                lower=c(-1, 0.001,1))$estimate[3])
+
+
 
 Ell_9098 <- brms::rstudent_t(100000,6.95,0.103,0.169) -
   brms::rstudent_t(100000,2.58,0.00775,0.121)
