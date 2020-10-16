@@ -855,7 +855,10 @@ cs_loc_moist07_long <- cs_loc_moist %>%
   mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
   filter(field_season == 1) %>%
   group_by(Year, REP_ID) %>%
-  summarise(mean_moisture = mean(moisture), month = max(Month))
+  summarise(mean_moisture = mean(moisture), month = max(Month)) %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
 
 cs_loc_moist07_sample_month <- cs_loc_moist %>%
   as.data.frame() %>%
@@ -867,7 +870,10 @@ cs_loc_moist07_sample_month <- cs_loc_moist %>%
   left_join(select(sample_date, SERIES_NUM, DATE = MID__DATE07)) %>%
   filter(Month == DATE) %>%
   group_by(Year, REP_ID) %>%
-  summarise(eo_moisture = mean(moisture))
+  summarise(eo_moisture = mean(moisture))%>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
 
 
 

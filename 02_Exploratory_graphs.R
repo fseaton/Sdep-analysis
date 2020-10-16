@@ -1111,23 +1111,21 @@ psych::pairs.panels(select_if(phr_ell_wide, is.numeric),
 
 
 # Soil moisture ####
-UK19_WET <- UK19_WET %>%
-  mutate(REP_ID = paste0(`Square number...1`,`X plot...2`)) %>%
-  select(-starts_with("Square")) %>%
-  select(-starts_with("X "))
-
 MOISTURE <- CS_tier4 %>%
   mutate(REP_ID = ifelse(!is.na(REP_ID07), REP_ID07,
                          ifelse(!is.na(REP_ID98), REP_ID98,
                                 ifelse(!is.na(REP_ID78), REP_ID78, NA)))) %>%
   select(REP_ID, MOISTURE_CONTENT_07, MOISTURE_CONTENT_98) %>%
-  full_join(select(UK19_WET, REP_ID, MOISTURE_CONTENT_19 = `g water/wet weight of soil`)) %>%
+  full_join(select(UK19_WET, REP_ID, MOISTURE_CONTENT_19 = `g_water/wet_weight_of_soil`)) %>%
   # mutate(VWC_19 = 100*VWC_19) %>%
   pivot_longer(starts_with("MOISTURE"), names_to = "variable", 
                values_to = "Moisture") %>%
   mutate(Year = ifelse(variable == "MOISTURE_CONTENT_07", 2007,
                        ifelse(variable == "MOISTURE_CONTENT_98", 1998,
-                              ifelse(variable == "MOISTURE_CONTENT_19", 2019, NA))))
+                              ifelse(variable == "MOISTURE_CONTENT_19", 2019, NA)))) %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
 
 ggplot(MOISTURE, aes(x = Moisture)) + 
   geom_histogram() +
@@ -1169,6 +1167,24 @@ MOISTURE_PH$Year_cat <- as.factor(MOISTURE_PH$year)
 get_prior(bf(pH ~ a*exp(b*Moisture) + c*exp(d*Moisture) + e, 
              a + b + c + d + e ~1, nl = TRUE),
           data = MOISTURE_PH)
+
+
+# CHess soil moisture
+soil_moist_long <- soil_moist %>%
+  # `colnames<-`(c(paste0(LETTERS[1:14],colnames(soil_moist)))) %>%
+  pivot_longer(AJan:LDec, names_to = "Month", values_to = "Moisture") %>%
+  mutate(month_num = as.numeric(as.factor(Month)))
+
+ggplot(soil_moist_long, aes(x = Measting, y = Nnorthing, fill = Moisture)) +
+  geom_tile() + 
+  coord_fixed() + 
+  facet_wrap(~month_num) +
+  theme(axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.title = element_blank())
+ggsave("JULES soil moisture maps 2007.png",
+       path = "Outputs/Graphs/", width = 30, height = 30, units = "cm")
 
 # Rainfall data ####
 ggplot(cs_survey_rainfall, aes(x = mean_rainfall)) +
@@ -1227,27 +1243,54 @@ rain_moist_hab07 <- rain_moist_hab %>%
   full_join(cs_loc_moist07_sample_month)
 ggplot(rain_moist_hab07, aes(x = eo_moisture, y = Moisture)) + 
   geom_point(aes(colour = month))
+ggplot(rain_moist_hab07, aes(x = eo_moisture, y = Moisture)) + 
+  geom_point() +
+  labs(x = "JULES soil moisture", y = "Field soil moisture")
+ggsave("Field moisture compared to JULES soil moisture.png",
+       path = "Outputs/Graphs/", width = 20, height = 12, units = "cm")
 ggplot(rain_moist_hab07, aes(x = eo_moisture, y = mean_moisture)) + 
   geom_point()
 ggplot(rain_moist_hab07, aes(x = mean_rainfall, y = Moisture)) + 
   geom_point(aes(colour = eo_moisture))
 
-rain_moist_hab07 <- left_join(rain_moist_hab07, cs_loc07_temp)
+rain_moist_hab07 <- left_join(rename(rain_moist_hab07, REPEAT_PLOT_ID = REP_ID), 
+                              filter(plot_locations, YEAR == "y07"))
 ggplot(rain_moist_hab07, aes(x = eo_moisture, y = Moisture)) + 
   geom_point(aes(colour = N_10_FIG_1M))
-p1_eo <- ggplot(rain_moist_hab07, aes(x = E_10_FIG_1M, y = N_10_FIG_1M)) + 
+p1_eo <- ggplot(filter(rain_moist_hab07, !is.na(eo_moisture)), 
+                aes(x = E_10_FIG_1M, y = N_10_FIG_1M)) + 
   geom_point(aes(colour = eo_moisture)) +
-  coord_fixed()
+  coord_fixed() +
+  theme(axis.line = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank(), 
+        axis.title = element_blank()) +
+  scale_color_continuous(name = "") +
+  ggtitle("JULES soil moisture")
 p2_meas <- ggplot(filter(rain_moist_hab07, !is.na(Moisture)),
                   aes(x = E_10_FIG_1M, y = N_10_FIG_1M)) + 
   geom_point(aes(colour = Moisture)) +
-  coord_fixed()
+  coord_fixed() +
+  theme(axis.line = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank(), 
+        axis.title = element_blank()) +
+  scale_color_continuous(name = "") +
+  ggtitle("Field soil moisture")
 p3_rain <- ggplot(filter(rain_moist_hab07, !is.na(mean_rainfall)),
                   aes(x = E_10_FIG_1M, y = N_10_FIG_1M)) + 
   geom_point(aes(colour = mean_rainfall)) +
-  coord_fixed()
+  coord_fixed() +
+  theme(axis.line = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank(), 
+        axis.title = element_blank()) +
+  scale_color_continuous(name = "") +
+  ggtitle("Mean rainfall")
 
 p1_eo + p2_meas + p3_rain
+ggsave("Map of Soil moisture and rainfall over CS 2007.png",
+       path = "Outputs/Graphs", width = 30, height = 15, units = "cm")
 
 p1_eo <- ggplot(rain_moist_hab07, aes(x = eo_moisture)) +
   geom_histogram(bins = 40)
