@@ -150,6 +150,71 @@ BH_comb_nodupes <- BH_comb %>%
                           BH_DESC = BROAD_HABITAT)))
 
 
+# Improved habitat ####
+
+# Calculate cover of plots occupied by 3 indicators of high-intensity grassland
+# management: Lolium perenne (9201183), Lolium multiflorum (9201182), Trifolium repens
+# (9202092)
+
+CS_IMP <- CS07_SP %>%
+  left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
+  select(REP_ID, BRC_NUMBER, FIRST_COVER, TOTAL_COVER) %>%
+  mutate(Year = 2007) %>%
+  full_join(select(CS19_SP, REP_ID, BRC_NUMBER, FIRST_COVER, TOTAL_COVER) %>%
+              mutate(Year = 2019)) %>%
+  full_join(select(CS98_SP, REP_ID, BRC_NUMBER, FIRST_COVER, TOTAL_COVER) %>%
+              mutate(Year = 1998)) %>%
+  full_join(select(CS90_SP, REP_ID, BRC_NUMBER, FIRST_COVER = C1, TOTAL_COVER) %>%
+              mutate(Year = 1990)) %>%
+  full_join(select(CS78_SP, REP_ID, BRC_NUMBER, FIRST_COVER = COVER, TOTAL_COVER = COVER) %>%
+              mutate(Year = 1978)) %>%
+  filter(BRC_NUMBER %in% c(9201183,9201182,9202092)) %>%
+  group_by(REP_ID, Year) %>%
+  summarise(FIRST_COVER = sum(FIRST_COVER),
+            TOTAL_COVER = sum(TOTAL_COVER)) %>%
+  mutate(across(ends_with("COVER"), replace_na, 0)) %>%
+  mutate(across(ends_with("COVER"), cut, breaks = c(-Inf,25,Inf),
+                labels = c("Semi-natural","Managed"))) %>%
+  left_join(CS_REP_ID_LONG) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID)
+
+
+# Only using this for neutral grassland, check congruence between classification
+# for inner and full square
+BH_IMP <- full_join(BH_comb_nodupes, CS_IMP)
+filter(BH_IMP, BH == 6) %>%
+  mutate(Improved = ifelse(TOTAL_COVER == "Managed" & FIRST_COVER == "Managed",
+                           "Both managed",
+                           ifelse(TOTAL_COVER == "Managed" & FIRST_COVER == "Semi-natural",
+                                  "Full managed",
+                                  ifelse(TOTAL_COVER == "Semi-natural" & FIRST_COVER == "Managed",
+                                         "Inner managed",
+                                         "Semi-natural")))) %>%
+  count(Improved)
+# Improved          n
+# <chr>         <int>
+#   1 Both managed    429
+# 2 Full managed    186
+# 3 Inner managed    24
+# 4 Semi-natural   2104
+# 5 NA             3008
+# NA's are from sites with no instances of the species mentioned above
+
+# Generally agree with each other, but full X plot more likely to suggest high
+# intensity when inner does not. Use outer classification for all instances as
+# it is more likely to represent true management
+
+# Create table with a variable that is "High" for improved grassland and more
+# managed neutral grassland. It is "low" for broadleaved woodland and
+# semi-natural habitats (minus coastal) but NA for everything else (including
+# arable, conifer, water, urban etc)
+BH_IMP <- full_join(BH_comb_nodupes, CS_IMP) %>%
+  mutate(TOTAL_COVER = replace_na(TOTAL_COVER, "Semi-natural")) %>%
+  mutate(Management = ifelse(BH == 5 | (BH == 6 & TOTAL_COVER == "Managed"), "High",
+                             ifelse(BH %in% c(1,7,8,9,10,11,12,15,16,23) | (BH == 6 & TOTAL_COVER == "Semi-natural"),
+                                    "Low", NA))) %>%
+  select(-ends_with("COVER"))
 
 # Ellenberg scores ####
 # Ellenberg for inner 2x2m square
@@ -458,6 +523,53 @@ sample_date <- plot_dates %>%
   mutate(across(starts_with("MID_"), lubridate::ymd)) %>%
   mutate(across(starts_with("MID_"), lubridate::month))
 
+# 2019
+rain19 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_201901-201912.nc"
+rain <- raster::brick(rain19)
+rain[rain > 9e20] <- NA
+
+cs_loc19 <- VEGETATION_PLOTS_20161819 %>%
+  filter(PLOTYEAR == 2019) %>%
+  select(REP_ID, POINT_X, POINT_Y) %>%
+  # have 3 duplicated plots so taking average of the points given
+  # 377D4, 431Y1, 912R1
+  group_by(REP_ID) %>%
+  summarise(POINT_X = mean(POINT_X), POINT_Y = mean(POINT_Y)) %>%
+  na.omit() %>%
+  st_as_sf(coords = c("POINT_X","POINT_Y"), crs = 27700)
+
+cs_loc_rain19 <- raster::extract(rain, cs_loc19)
+rownames(cs_loc_rain19) <- cs_loc19$REP_ID
+# for reps that aren't in raster
+cs_loc19_na <- cs_loc19 %>%
+  filter(REP_ID %in% rownames(cs_loc_rain19)[is.na(cs_loc_rain19[,1])])
+cs_loc_rain19_na <- raster::extract(rain, cs_loc19_na,
+                                    fun = mean, buffer = 2000)
+rownames(cs_loc_rain19_na) <- cs_loc19_na$REP_ID
+cs_loc_rain19 <- rbind(na.omit(cs_loc_rain19),
+                       cs_loc_rain19_na)
+colnames(cs_loc_rain19) <- paste("X",c(1:12), "2019", sep = "_")
+
+
+cs_loc_rain19_long <- cs_loc_rain19 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("REP_ID") %>%
+  pivot_longer(starts_with("X"), names_to = c("Month", "Year"),
+               names_prefix = "X_", names_sep = "_",
+               values_to = "rainfall") %>%
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "[A-Z]"),"[", 1)),
+         rainfall = ifelse(rainfall < 9e20, rainfall, NA)) %>%
+  left_join(select(sample_date, SERIES_NUM, DATE = MID_DATE19)) %>%
+  mutate(DATE = ifelse(!is.na(DATE), DATE, 
+                       round(mean(DATE, na.rm = TRUE))+1),
+         Month = as.numeric(Month)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month > DATE - 4, 1,0)) %>%
+  filter(field_season == 1) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(mean_rainfall = mean(rainfall),
+            sum_rainfall = sum(rainfall)) 
+
+
 # 2018
 rain18 <- "~/Shapefiles/HadUK-Grid/rainfall_hadukgrid_uk_1km_mon_201801-201812.nc"
 rain <- raster::brick(rain18)
@@ -716,7 +828,8 @@ cs_loc_rain78_long <- cs_loc_rain78 %>%
             sum_rainfall = sum(rainfall))
 
 #combine years
-cs_survey_rainfall <- do.call(rbind, list(cs_loc_rain18_long,
+cs_survey_rainfall <- do.call(rbind, list(cs_loc_rain19_long,
+                                          cs_loc_rain18_long,
                                           cs_loc_rain16_long,
                                           cs_loc_rain07_long,
                                           cs_loc_rain98_long,
@@ -885,31 +998,25 @@ str(Ndep_avg)
 Ndep_avg_cumsum <- Ndep_avg %>%
   mutate(Navg_cumdep78 = rowSums(select(.,gridavg_1970:gridavg_1978)),
          Navg_cumdep90 = rowSums(select(.,gridavg_1970:gridavg_1990)),
-         Navg_cumdep98 = rowSums(select(.,gridavg_1970:gridavg_1998)),
-         Navg_cumdep07 = rowSums(select(.,gridavg_1970:gridavg_2007)),
-         Navg_cumdep18 = rowSums(select(.,gridavg_1970:gridavg_2018)),
-         Navg_cumdep07_30 = rowSums(select(.,gridavg_1977:gridavg_2007)),
-         Navg_cumdep18_30 = rowSums(select(.,gridavg_1988:gridavg_2018))) %>%
+         Navg_cumdep98 = rowSums(select(.,gridavg_1973:gridavg_1998)),
+         Navg_cumdep07 = rowSums(select(.,gridavg_1982:gridavg_2007)),
+         Navg_cumdep18 = rowSums(select(.,gridavg_1993:gridavg_2018))) %>%
   select(x,y,contains("cumdep"))
 
 Ndep_for_cumsum <- Ndep_for %>%
   mutate(Nfor_cumdep78 = rowSums(select(.,forest_1970:forest_1978)),
          Nfor_cumdep90 = rowSums(select(.,forest_1970:forest_1990)),
-         Nfor_cumdep98 = rowSums(select(.,forest_1970:forest_1998)),
-         Nfor_cumdep07 = rowSums(select(.,forest_1970:forest_2007)),
-         Nfor_cumdep18 = rowSums(select(.,forest_1970:forest_2018)),
-         Nfor_cumdep07_30 = rowSums(select(.,forest_1977:forest_2007)),
-         Nfor_cumdep18_30 = rowSums(select(.,forest_1988:forest_2018))) %>%
+         Nfor_cumdep98 = rowSums(select(.,forest_1973:forest_1998)),
+         Nfor_cumdep07 = rowSums(select(.,forest_1982:forest_2007)),
+         Nfor_cumdep18 = rowSums(select(.,forest_1993:forest_2018))) %>%
   select(x,y,contains("cumdep"))
 
 Ndep_moo_cumsum <- Ndep_moo %>%
   mutate(Nmoo_cumdep78 = rowSums(select(.,moor_1970:moor_1978)),
          Nmoo_cumdep90 = rowSums(select(.,moor_1970:moor_1990)),
-         Nmoo_cumdep98 = rowSums(select(.,moor_1970:moor_1998)),
-         Nmoo_cumdep07 = rowSums(select(.,moor_1970:moor_2007)),
-         Nmoo_cumdep18 = rowSums(select(.,moor_1970:moor_2018)),
-         Nmoo_cumdep07_30 = rowSums(select(.,moor_1977:moor_2007)),
-         Nmoo_cumdep18_30 = rowSums(select(.,moor_1988:moor_2018))) %>%
+         Nmoo_cumdep98 = rowSums(select(.,moor_1973:moor_1998)),
+         Nmoo_cumdep07 = rowSums(select(.,moor_1982:moor_2007)),
+         Nmoo_cumdep18 = rowSums(select(.,moor_1993:moor_2018))) %>%
   select(x,y,contains("cumdep"))
 
 Ndep_cumsum <- full_join(Ndep_avg_cumsum, 
@@ -917,7 +1024,6 @@ Ndep_cumsum <- full_join(Ndep_avg_cumsum,
   full_join(Ndep_moo_cumsum)
 
 Ndep_cumsum70 <- Ndep_cumsum %>%
-  select(-ends_with("_30")) %>%
   melt(id.vars = c("x","y"), variable.factor = FALSE, 
        value.name = "Ndep") %>%
   mutate(Year = recode(substring(variable,12,13),
@@ -936,31 +1042,25 @@ str(Sdep_avg)
 Sdep_avg_change <- Sdep_avg %>%
   mutate(Savg_change78 = gridavg_1978 - gridavg_1970,
          Savg_change90 = gridavg_1990 - gridavg_1970,
-         Savg_change98 = gridavg_1998 - gridavg_1970,
-         Savg_change07 = gridavg_2007 - gridavg_1970,
-         Savg_change18 = gridavg_2018 - gridavg_1970,
-         Savg_change07_30 = gridavg_2007 - gridavg_1977,
-         Savg_change18_30 = gridavg_2018 - gridavg_1988) %>%
+         Savg_change98 = gridavg_1998 - gridavg_1973,
+         Savg_change07 = gridavg_2007 - gridavg_1982,
+         Savg_change18 = gridavg_2018 - gridavg_1993) %>%
   select(x,y,contains("change"))
 
 Sdep_for_change <- Sdep_for %>%
   mutate(Sfor_change78 = forest_1978 - forest_1970,
          Sfor_change90 = forest_1990 - forest_1970,
-         Sfor_change98 = forest_1998 - forest_1970,
-         Sfor_change07 = forest_2007 - forest_1970,
-         Sfor_change18 = forest_2018 - forest_1970,
-         Sfor_change07_30 = forest_2007 - forest_1977,
-         Sfor_change18_30 = forest_2018 - forest_1988) %>%
+         Sfor_change98 = forest_1998 - forest_1973,
+         Sfor_change07 = forest_2007 - forest_1982,
+         Sfor_change18 = forest_2018 - forest_1993) %>%
   select(x,y,contains("change"))
 
 Sdep_moo_change <- Sdep_moo %>%
   mutate(Smoo_change78 = moor_1978 - moor_1970,
          Smoo_change90 = moor_1990 - moor_1970,
-         Smoo_change98 = moor_1998 - moor_1970,
-         Smoo_change07 = moor_2007 - moor_1970,
-         Smoo_change18 = moor_2018 - moor_1970,
-         Smoo_change07_30 = moor_2007 - moor_1977,
-         Smoo_change18_30 = moor_2018 - moor_1988) %>%
+         Smoo_change98 = moor_1998 - moor_1973,
+         Smoo_change07 = moor_2007 - moor_1982,
+         Smoo_change18 = moor_2018 - moor_1993) %>%
   select(x,y,contains("change"))
 
 Sdep_change <- full_join(Sdep_avg_change, 
@@ -968,7 +1068,6 @@ Sdep_change <- full_join(Sdep_avg_change,
   full_join(Sdep_moo_change)
 
 Sdep_change70 <- Sdep_change %>%
-  select(-ends_with("_30")) %>%
   melt(id.vars = c("x","y"), variable.factor = FALSE, 
        value.name = "Sdep") %>%
   mutate(Year = recode(substring(variable,12,13),
