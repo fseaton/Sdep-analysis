@@ -1391,3 +1391,89 @@ ggplot(CN_atdep,
   geom_point() +
   labs(x = "Cumulative N deposition", y = "C:N") +
   facet_wrap(~Year + Habitat, nrow = 3)
+
+
+# Soil nitrogen ###
+Nitrogen <- full_join(CS07_MINN, CS07_CN)
+
+ggplot(Nitrogen, aes(x = N_PERCENT, y = NE_NMINTOT_SOIL)) + 
+  geom_point() +
+  labs(x = "Total N (%)", y = "Total Mineralisable N (mg N / g dry soil)")
+p3 <- ggplot(Nitrogen, aes(x = N_PERCENT, y = NE_NMINTOT_SOM)) + 
+  geom_point() +
+  labs(x = "Total N (%)", y = "Total Mineralisable N (mg N / g LOI)") +
+  scale_y_log10()
+
+cor(Nitrogen$N_PERCENT, Nitrogen$NE_NMINTOT_SOM, method = "spearman",
+    use = "complete.obs")
+
+ggplot(Nitrogen, aes(x = N_PERCENT, y = NE_NH4N_SOM)) + 
+  geom_point() +
+  labs(x = "Total N (%)", y = "Total NH4 (mg N / g LOI)") +
+  scale_y_log10()
+p2<- ggplot(Nitrogen, aes(x = N_PERCENT, y = NE_NO3N_SOM)) + 
+  geom_point() +
+  labs(x = "Total N (%)", y = "Total NO3 (mg N / g LOI)") +
+  scale_y_log10()
+
+cor(Nitrogen$N_PERCENT, Nitrogen$NE_NO3N_SOM, method = "spearman",
+    use = "complete.obs")
+
+
+Nitrogen$NC_ratio <- Nitrogen$N_PERCENT/Nitrogen$C_PERCENT
+
+ggplot(Nitrogen, aes(x = NC_ratio, y = NE_NMINTOT_SOIL)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "Total Mineralisable N (mg N / g dry soil)") +
+  scale_y_log10()
+
+p4 <- ggplot(Nitrogen, aes(x = NC_ratio, y = NE_NMINTOT_SOM)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "Total Mineralisable N (mg N / g LOI)") +
+  scale_y_log10()
+
+cor(Nitrogen$NC_ratio, Nitrogen$NE_NMINTOT_SOM, method = "spearman",
+    use = "complete.obs")
+# 0.5645039
+
+ggplot(Nitrogen, aes(x = NC_ratio, y = NE_NH4N_SOM)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "Total NH4 (mg N / g LOI)") +
+  scale_y_log10()
+
+cor(Nitrogen$NC_ratio, Nitrogen$NE_NH4N_SOM, method = "spearman",
+    use = "complete.obs")
+
+p1 <- ggplot(Nitrogen, aes(x = NC_ratio, y = NE_NO3N_SOM)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "Total NO3 (mg N / g LOI)") +
+  scale_y_log10()
+
+cor(Nitrogen$NC_ratio, Nitrogen$NE_NO3N_SOM, method = "spearman",
+    use = "complete.obs")
+# 0.608635
+
+
+Nitrogen <- left_join(Nitrogen, select(CS07_PH, -BATCH_NUM))
+
+ggplot(Nitrogen, aes(x = NC_ratio, y = PH2007_IN_WATER)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "pH") +
+  scale_y_log10()
+
+ggplot(Nitrogen, aes(x = N_PERCENT, y = C_PERCENT)) + 
+  geom_point() +
+  labs(x = "Total N", y = "Total C") +
+  scale_y_log10()
+
+
+ggplot(Nitrogen, aes(x = NC_ratio, y = NE_NMINTOT_SOM, 
+                     colour = PH2007_IN_WATER)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "Total Mineralisable N (mg N / g LOI)") +
+  scale_y_log10()
+
+
+coplot(NC_ratio ~ log(NE_NMINTOT_SOM) | PH2007_IN_WATER, Nitrogen)
+coplot(log(NE_NMINTOT_SOM) ~ NC_ratio | PH2007_IN_WATER, Nitrogen)
+
