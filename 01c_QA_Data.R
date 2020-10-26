@@ -3,20 +3,18 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 theme_set(theme_bw())
+library(patchwork)
 
 # Ellenberg QA data ####
 # Only doing this for Ellenberg R right now
 # for small plot calculations can also include Y and U plots (both 4m2)
-str(CSVEG_QA)
+str(CS_VEG_QA)
 
 CS16_VEG_QA2 <- CS16_VEG_QA %>%
   mutate(REP_ID = substring(Quadrat,2)) %>%
   mutate(PLOT_TYPE = gsub("[0-9]","",REP_ID)) %>%
   filter(PLOT_TYPE %in% c("X","Y","U")) %>%
-  left_join(select(VEGETATION_PLOTS_20161819, REP_ID = REP_ID_NEW,
-                   CS_REP_ID = REP_ID)) %>%
-  select(-REP_ID) %>%
-  select(REP_ID = CS_REP_ID, PLOT_TYPE, BRC_NUMBER = Names, COVER = Cover,
+  select(REP_ID, PLOT_TYPE, BRC_NUMBER = Names, COVER = Cover,
          Surveyor = SURVEY) %>%
   mutate(Year = 2019,
          Surveyor = recode(Surveyor, 
@@ -33,6 +31,11 @@ X_Ell_QA_whole <- CS19_VEG_QA %>%
   filter(Surveyor == "QA") %>%
   select(REP_ID, PLOT_TYPE, BRC_NUMBER, COVER = TOTAL_NUM) %>%
   mutate(Year = 2019, Surveyor = "QA") %>%
+  full_join(select(mutate(filter(CS19_SP, 
+                                 PLOT_TYPE == "X" &
+                                   REP_ID %in% CS19_VEG_QA$REP_ID), 
+                          Year = 2019, Surveyor = "CS"),
+                   REP_ID, Year, BRC_NUMBER, PLOT_TYPE, COVER = TOTAL_COVER, Surveyor)) %>%
   full_join(CS16_VEG_QA2) %>%
   full_join(CS_VEG_QA2) %>%
   filter(PLOT_TYPE == "X") %>%
@@ -51,6 +54,11 @@ X_Ell_QA_inner <- CS19_VEG_QA %>%
   filter(Surveyor == "QA" & NEST_LEVEL < 2) %>%
   select(REP_ID, PLOT_TYPE, BRC_NUMBER, COVER = FIRST_COVER) %>%
   mutate(Year = 2019, Surveyor = "QA") %>%
+  full_join(select(mutate(filter(CS19_SP, 
+                                 PLOT_TYPE %in% c("X","XX") & NEST_LEVEL < 2 &
+                                   REP_ID %in% CS19_VEG_QA$REP_ID), 
+                          Year = 2019, Surveyor = "CS"),
+                   REP_ID, Year, BRC_NUMBER, COVER = FIRST_COVER, Surveyor)) %>%
   full_join(filter(CS16_VEG_QA2, PLOT_TYPE %in% c("Y","U"))) %>%
   full_join(filter(CS_VEG_QA2, PLOT_TYPE %in% c("Y","U"))) %>%
   left_join(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
@@ -68,10 +76,10 @@ X_Ell_QA <- full_join(X_Ell_QA_inner, X_Ell_QA_whole) %>%
   left_join(CS_REP_ID_LONG) %>%
   mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
   select(-REPEAT_PLOT_ID) %>%
-  left_join(select(X_Ell, REP_ID, Year,
-                   SM_R_W, SM_R_UW,WH_R_W,WH_R_UW) %>%
-              filter(Year == 2019) %>%
-              mutate(Surveyor = "CS")) %>%
+  # left_join(select(X_Ell, REP_ID, Year,
+  #                  SM_R_W, SM_R_UW,WH_R_W,WH_R_UW) %>%
+  #             filter(Year == 2019 & REP_ID %in% filter(X_Ell_QA_inner, Year == 2019)$REP_ID) %>%
+  #             mutate(Surveyor = "CS")) %>%
   pivot_longer(contains("_R_"), 
                names_to = c("PlotSize","Ellenberg","Weighting"),
                names_sep = "_", values_to = "score") %>%
@@ -106,7 +114,6 @@ janitor::tabyl(X_Ell_QA, Year, PlotSize, Weighting)
 # 2019 43 43
 
 X_Ell_QA %>% 
-  # mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
   group_by(Year, PlotSize, Weighting) %>%
   na.omit() %>%
   summarise(mu = MASS::fitdistr(Diff,"t", 
@@ -118,23 +125,52 @@ X_Ell_QA %>%
             df = MASS::fitdistr(Diff,"t", 
                                 start = list(m = 0, s = 0.2, df = 5),
                                 lower=c(-1, 0.001,1))$estimate[3])
-# PlotSize Weighting      mu    sd    df
-# <chr>    <chr>       <dbl> <dbl> <dbl>
-# 1 SM       UW         0.0452 0.256  4.07
-# 2 SM       W          0.0373 0.378  6.64
-# 3 WH       UW        -0.0388 0.128  5.50
-# 4 WH       W         -0.0714 0.298 29.9 
+# Year PlotSize Weighting       mu    sd       df
+# <dbl> <chr>    <chr>        <dbl> <dbl>    <dbl>
+#  1  1990 SM       UW        -0.00521 0.136     2.08
+#  2  1990 SM       W         -0.0280  0.197     1.79
+#  3  1990 WH       UW        -0.0154  0.124     2.70
+#  4  1990 WH       W          0.0424  0.226     4.16
+#  5  1998 SM       UW        -0.0593  0.215    17.4 
+#  6  1998 SM       W         -0.0269  0.228     3.81
+#  7  1998 WH       UW        -0.0980  0.174     8.04
+#  8  1998 WH       W         -0.0718  0.239 11587.  
+#  9  2007 SM       UW        -0.0174  0.216     3.48
+# 10  2007 SM       W          0.00557 0.225     1.79
+# 11  2007 WH       UW        -0.0113  0.163     4.05
+# 12  2007 WH       W         -0.0393  0.148     2.03
+# 13  2019 SM       UW         0.0231  0.248     4.75
+# 14  2019 SM       W         -0.0152  0.403     6.39
+# 15  2019 WH       UW        -0.0167  0.149     5.68
+# 16  2019 WH       W         -0.0406  0.244     2.68
 
-X_Ell_QA_hab <- left_join(X_Ell_QA, BH_comb_nodupes)
+X_Ell_QA_hab <- left_join(X_Ell_QA, BH_IMP)
 table(X_Ell_QA_hab$BH_DESC)
+table(X_Ell_QA_hab$Management)
 
+ggplot(filter(X_Ell_QA_hab, !is.na(Management)), 
+       aes(x = Diff, fill = Management)) + 
+  geom_histogram() +
+  facet_wrap(~Year + PlotSize + Weighting)
 
+p1 <- X_Ell_QA_hab %>%
+  filter(Management == "High") %>%
+  ggplot(aes(x = Diff)) + 
+  geom_histogram() +
+  facet_wrap(~Year + PlotSize + Weighting)
+p2 <- X_Ell_QA_hab %>%
+  filter(Management == "Low") %>%
+  ggplot(aes(x = Diff)) + 
+  geom_histogram() +
+  facet_wrap(~Year + PlotSize + Weighting)
+p1+p2
+
+# seems reasonable to keep the two habitat categories separate
 
 X_Ell_QA_hab <- filter(X_Ell_QA_hab,
-                       BH %in% c(1,5,6,7,8,9,10,11,12)) %>%
-  mutate(Improved = ifelse(BH %in% c(5,6),1,0))
+                       !is.na(Management))
 
-janitor::tabyl(X_Ell_QA_hab, Year, PlotSize, Improved)
+janitor::tabyl(X_Ell_QA_hab, Year, PlotSize, Management)
 X_Ell_QA_hab %>% 
   group_by(Year, PlotSize, Weighting) %>%
   na.omit() %>%
@@ -147,27 +183,123 @@ X_Ell_QA_hab %>%
             df = MASS::fitdistr(Diff,"t", 
                                 start = list(m = 0, s = 0.2, df = 5),
                                 lower=c(-1, 0.001,1))$estimate[3])
+# Year PlotSize Weighting       mu    sd       df
+# <dbl> <chr>    <chr>        <dbl> <dbl>    <dbl>
+#   1  1990 SM       UW         0.0407  0.218     5.66
+# 2  1990 SM       W         -0.0376  0.264     2.80
+# 3  1990 WH       UW        -0.0239  0.118     5.64
+# 4  1990 WH       W          0.0450  0.147     2.03
+# 5  1998 SM       UW        -0.0662  0.245 17300.  
+# 6  1998 SM       W         -0.0475  0.246     4.25
+# 7  1998 WH       UW        -0.0947  0.181     8.94
+# 8  1998 WH       W         -0.0666  0.249 24044.  
+# 9  2007 SM       UW        -0.0185  0.238     4.00
+# 10  2007 SM       W          0.0113  0.237     1.98
+# 11  2007 WH       UW         0.00441 0.164     3.83
+# 12  2007 WH       W         -0.0518  0.161     2.15
+# 13  2019 SM       UW         0.0714  0.272     4.50
+# 14  2019 SM       W          0.0370  0.444    17.3 
+# 15  2019 WH       UW        -0.0247  0.122     5.01
+# 16  2019 WH       W         -0.0706  0.325 22478. 
 
-
-
-Ell_9098 <- brms::rstudent_t(100000,6.95,0.103,0.169) -
-  brms::rstudent_t(100000,2.58,0.00775,0.121)
-MASS::fitdistr(Ell_9098, "t")
+# 1978 (using 1990 data) to 1998
+Ell_SMUW_9098 <- brms::rstudent_t(100000,17300,-0.0662,0.245) -
+  brms::rstudent_t(100000,5.66,0.0407,0.218)
+MASS::fitdistr(Ell_SMUW_9098, "t")
 # m              s              df     
-# 0.0955785286   0.2241806089   4.4623073358 
-# (0.0008300429) (0.0008397081) (0.0605551027)
-Ell_9807 <- brms::rstudent_t(100000,4.08,0.0111,0.164) - 
-  brms::rstudent_t(100000,6.95,0.103,0.169)
-MASS::fitdistr(Ell_9807, "t")
+# -0.107218165    0.335994946   13.349240068 
+# ( 0.001134349) ( 0.001139551) ( 0.454512158)
+
+Ell_SMW_9098 <- brms::rstudent_t(100000,4.25,-0.0475,0.246) -
+  brms::rstudent_t(100000,2.8,-0.0376,0.264)
+MASS::fitdistr(Ell_SMW_9098, "t")
+# m              s              df     
+# -0.009222229    0.402272065    3.992830215 
+# ( 0.001506537) ( 0.001568434) ( 0.051362460)
+
+Ell_WHUW_9098 <- brms::rstudent_t(100000,8.94,-0.0947,0.181) -
+  brms::rstudent_t(100000,5.64,-0.0239,0.118)
+MASS::fitdistr(Ell_WHUW_9098, "t")
 # m               s               df      
-# -0.0914398076    0.2526516756    6.5811814098 
-# ( 0.0008985194) ( 0.0009267179) ( 0.1258995813)
-Ell_0719 <- brms::rstudent_t(100000,5.25,0.0169,0.150) - 
-  brms::rstudent_t(100000,4.08,0.0111,0.164) 
-MASS::fitdistr(Ell_0719, "t")
+# -0.0713936535    0.2283446128   11.3127031202 
+# ( 0.0007785483) ( 0.0008193378) ( 0.3573662196)
+
+Ell_WHW_9098 <- brms::rstudent_t(100000,24044,-0.0666,0.249) -
+  brms::rstudent_t(100000,2.03,0.0450,0.147)
+MASS::fitdistr(Ell_WHW_9098, "t")
 # m              s              df     
-# 0.0051229646   0.2419197912   5.9533278679 
-# (0.0008683201) (0.0009036674) (0.1059707380)
+# -0.110701734    0.289838786    3.727722331 
+# ( 0.001098847) ( 0.001073164) ( 0.042244196)
+
+# 1998 to 2007
+Ell_SMUW_9807 <- brms::rstudent_t(100000,4,-0.0185,0.238) - 
+  brms::rstudent_t(100000,17300,-0.0662,0.245)
+MASS::fitdistr(Ell_SMUW_9807, "t")
+# m             s            df     
+# 0.047590244   0.345606483   6.755654407 
+# (0.001226635) (0.001239306) (0.128356757)
+
+Ell_SMW_9807 <- brms::rstudent_t(100000,1.98,0.0113,0.237) - 
+  brms::rstudent_t(100000,4.25,-0.0475,0.246)
+MASS::fitdistr(Ell_SMW_9807, "t")
+# m             s            df     
+# 0.058753608   0.380087881   2.801772237 
+# (0.001488855) (0.001542747) (0.027393186)
+
+Ell_WHUW_9807 <- brms::rstudent_t(100000,3.83,0.00441,0.164) - 
+  brms::rstudent_t(100000,8.94,-0.0947,0.181)
+MASS::fitdistr(Ell_WHUW_9807, "t")
+# m              s              df     
+# 0.0977445019   0.2589425036   6.6014880982 
+# (0.0009206116) (0.0009507893) (0.1268536548)
+
+Ell_WHW_9807 <- brms::rstudent_t(100000,2.15,-0.0518,0.161) - 
+  brms::rstudent_t(100000,24044,-0.0666,0.249)
+MASS::fitdistr(Ell_WHW_9807, "t")
+# m             s            df     
+# 0.013821293   0.300038349   3.858779291 
+# (0.001131944) (0.001114372) (0.045294892)
+
+
+# 2007 to 2019
+Ell_SMUW_0719 <- brms::rstudent_t(100000,4.5,0.0714,0.272) - 
+  brms::rstudent_t(100000,4,-0.0185,0.238) 
+MASS::fitdistr(Ell_SMUW_0719, "t")
+# m            s            df    
+# 0.09095365   0.39628677   5.55613273 
+# (0.00143190) (0.00149642) (0.09387955)
+
+Ell_SMW_0719 <- brms::rstudent_t(100000,17.3,0.0370,0.444) - 
+  brms::rstudent_t(100000,1.98,0.0113,0.237)
+MASS::fitdistr(Ell_SMW_0719, "t")
+# m             s            df     
+# 0.025829038   0.517221524   3.883124492 
+# (0.001950536) (0.001908698) (0.045473849)
+
+Ell_WHUW_0719 <- brms::rstudent_t(100000,5.01,-0.0247,0.122)  - 
+  brms::rstudent_t(100000,3.83,0.00441,0.164) 
+MASS::fitdistr(Ell_WHUW_0719, "t")
+# m               s               df      
+# -0.0286482506    0.2224948589    5.2106944507 
+# ( 0.0008093376) ( 0.0008399981) ( 0.0827558915)
+
+Ell_WHW_0719 <- brms::rstudent_t(100000,22478,-0.0706,0.325) -
+  brms::rstudent_t(100000,2.15,-0.0518,0.161)
+MASS::fitdistr(Ell_WHW_0719, "t")
+# m              s              df     
+# -0.018246730    0.361091203    4.633014585 
+# ( 0.001334109) ( 0.001289639) ( 0.061159626)
+
+# Summary stats for s
+ELL_SE <- data.frame(
+  Time_period = c("7898","9807","0719"),
+  ELL_WH_W_SE = c(0.290,0.300,0.361),
+  ELL_WH_UW_SE = c(0.228,0.259,0.222),
+  ELL_SM_W_SE = c(0.402,0.380,0.517),
+  ELL_SM_UW_SE = c(0.336,0.346,0.396)
+)
+
+
 
 # check normal distribution
 X_Ell_whole_QA %>% 
@@ -518,8 +650,3 @@ MASS::fitdistr(phdiff0719, "t")
 # -0.0941307056    0.0651198536    2.3597493212 
 # ( 0.0002605570) ( 0.0002760143) ( 0.0208361922)
 
-
-
-# Error in rainfall ####
-# according to rainfall paper the uncertainty is ~ 0.4%
-hist(0.004*ELL_pH$fieldseason_rain)

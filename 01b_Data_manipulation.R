@@ -329,6 +329,15 @@ X_Ell <- full_join(
   select(-REPEAT_PLOT_ID)
 
 
+# Ellenberg QA summary data from 01c
+ELL_QA_diff <- data.frame(
+  Time_period = c("7898","9807","0719"),
+  ELL_WH_W_SE = c(0.290,0.300,0.361),
+  ELL_WH_UW_SE = c(0.228,0.259,0.222),
+  ELL_SM_W_SE = c(0.402,0.380,0.517),
+  ELL_SM_UW_SE = c(0.336,0.346,0.396)
+)
+
 
 # pH data ####
 UK19_PH <- UK19_PH %>%
@@ -407,8 +416,7 @@ PH_Diff_wide <- select(PH, REP_ID, diff0719) %>%
 PH_QA_diff <- data.frame(
   Time_period = c("7898","9807","0719"),
   PH_DIW_SE = c(0.357,0.303,0.187),
-  PH_CACL2_SE = c(NA,NA,0.065),
-  rain_diff_sd = 22
+  PH_CACL2_SE = c(NA,NA,0.065)
 )
 
 
@@ -504,7 +512,8 @@ CN <- full_join(CS98_CN, CS07_CN) %>%
   select(-SQUARE) %>%
   # one measurement at limit so removing
   mutate(N_PERCENT = ifelse(N_PERCENT <= 0.02, NA, N_PERCENT),
-         CN_RATIO = ifelse(N_PERCENT <= 0.02, NA, CN_RATIO))
+         CN_RATIO = ifelse(N_PERCENT <= 0.02, NA, CN_RATIO)) %>%
+  mutate(NC_RATIO = 1/CN_RATIO)
 summary(CN)
 hist(CN$N_PERCENT)
 # N percent is a bimodally distributed variable with peak one being roughly
@@ -736,7 +745,7 @@ cs_loc_rain98_long <- cs_loc_rain98 %>%
   mutate(DATE = ifelse(!is.na(DATE), DATE, 
                        round(mean(DATE, na.rm = TRUE))+1),
          Month = as.numeric(Month)) %>%
-  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 4, 1,0)) %>%
   filter(field_season == 1) %>%
   group_by(Year, REP_ID) %>%
   summarise(mean_rainfall = mean(rainfall),
@@ -778,7 +787,7 @@ cs_loc_rain90_long <- cs_loc_rain90 %>%
   mutate(DATE = ifelse(!is.na(DATE), DATE, 
                        round(mean(DATE, na.rm = TRUE))+1),
          Month = as.numeric(Month)) %>%
-  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 4, 1,0)) %>%
   filter(field_season == 1) %>%
   group_by(Year, REP_ID) %>%
   summarise(mean_rainfall = mean(rainfall),
@@ -821,7 +830,7 @@ cs_loc_rain78_long <- cs_loc_rain78 %>%
   mutate(DATE = ifelse(!is.na(DATE), DATE, 
                        round(mean(DATE, na.rm = TRUE))+1),
          Month = as.numeric(Month)) %>%
-  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 3, 1,0)) %>%
+  mutate(field_season = ifelse(Month <= DATE & Month >= DATE - 4, 1,0)) %>%
   filter(field_season == 1) %>%
   group_by(Year, REP_ID) %>%
   summarise(mean_rainfall = mean(rainfall),
