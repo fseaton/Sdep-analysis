@@ -85,6 +85,8 @@ GM16_CN <- dbReadTable(channelg, SQL("GMEP_SOILS.LANC_CHEM"))
 CS07_CN <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS2007_CN_DATA"))
 CS98_CN <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS1998_CN_DATA"))
 
+CS07_MINN <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS2007_MIN_N_DATA"))
+
 # pH QA data
 CS78_PH_QA <- read.csv("Outputs/W1971_remeasurement_pH.csv")
 # CS98_PH_QA <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS1998_PH_REANALYSED_DATA"))

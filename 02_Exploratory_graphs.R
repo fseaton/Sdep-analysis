@@ -1212,7 +1212,7 @@ ggplot(cs_survey_rainfall, aes(x = mean_rainfall, y = sum_rainfall)) +
 
 p1
 ggsave("Average monthly rainfall for 4 months pre-survey.png",
-       path = "Outputs/Graphs/",width = 12, height = 15, units = "cm")
+       path = "Outputs/Graphs/",width = 12, height = 18, units = "cm")
 
 
 # Rainfall and soil moisture ####
@@ -1223,14 +1223,27 @@ summary(rain_moist)
 mice::md.pattern(rain_moist)
 rain_moist %>% filter(is.na(mean_rainfall)) %>% .$Year %>% table()
 
-ggplot(rain_moist, aes(x = mean_rainfall, y = Moisture)) + 
+ggplot(rain_moist, aes(x = mean_rainfall, y = Moisture, 
+                       colour = as.factor(Year))) + 
   geom_point()
+ggplot(rain_moist, aes(x = mean_rainfall, y = Moisture)) + 
+  geom_point() +
+  facet_wrap(~Year)
 
 rain_moist_hab <- left_join(rain_moist, BH_comb)
 summary(rain_moist_hab)
 ggplot(rain_moist_hab, aes(x = mean_rainfall, y = Moisture)) + 
   geom_point() +
   facet_wrap(~BH_DESC)
+
+rain_moist_man <- left_join(rain_moist, BH_IMP)
+summary(rain_moist_man)
+ggplot(na.omit(rain_moist_man), 
+       aes(x = mean_rainfall, y = Moisture)) + 
+  geom_point(aes(colour = Management, fill = Management)) +
+  geom_smooth(method="lm", colour = "black") +
+  geom_smooth(method="lm", aes(colour = Management, fill = Management)) +
+  facet_wrap(~Year)
 
 # compare rainfall to sample and EO soil moisture
 rain_moist_hab <- left_join(rain_moist_hab, cs_loc_moist07_long)
@@ -1393,8 +1406,17 @@ ggplot(CN_atdep,
   facet_wrap(~Year + Habitat, nrow = 3)
 
 
-# Soil nitrogen ###
-Nitrogen <- full_join(CS07_MINN, CS07_CN)
+# Soil nitrogen ### 
+
+# Investigating which total N based metric is most related to mineralisable
+# N/nitrate. Options are N% or N:C, there are multiple metrics of mineralisable
+# N but nitrate is known to be related to NPP.
+Nitrogen <- CS07_MINN %>%
+  mutate(REP_ID = paste0(SQUARE_NUM, PLOT_TYPE, REP_NUM)) %>%
+  left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)) %>%
+  mutate(REP_ID = ifelse(!is.na(REPEAT_PLOT_ID), REPEAT_PLOT_ID, REP_ID)) %>%
+  select(-REPEAT_PLOT_ID) %>%
+  left_join(CS07_CN)
 
 ggplot(Nitrogen, aes(x = N_PERCENT, y = NE_NMINTOT_SOIL)) + 
   geom_point() +
@@ -1406,6 +1428,7 @@ p3 <- ggplot(Nitrogen, aes(x = N_PERCENT, y = NE_NMINTOT_SOM)) +
 
 cor(Nitrogen$N_PERCENT, Nitrogen$NE_NMINTOT_SOM, method = "spearman",
     use = "complete.obs")
+# [1] -0.5087721
 
 ggplot(Nitrogen, aes(x = N_PERCENT, y = NE_NH4N_SOM)) + 
   geom_point() +
@@ -1418,7 +1441,7 @@ p2<- ggplot(Nitrogen, aes(x = N_PERCENT, y = NE_NO3N_SOM)) +
 
 cor(Nitrogen$N_PERCENT, Nitrogen$NE_NO3N_SOM, method = "spearman",
     use = "complete.obs")
-
+# [1] -0.5469838
 
 Nitrogen$NC_ratio <- Nitrogen$N_PERCENT/Nitrogen$C_PERCENT
 
@@ -1443,6 +1466,7 @@ ggplot(Nitrogen, aes(x = NC_ratio, y = NE_NH4N_SOM)) +
 
 cor(Nitrogen$NC_ratio, Nitrogen$NE_NH4N_SOM, method = "spearman",
     use = "complete.obs")
+# [1] 0.1507093
 
 p1 <- ggplot(Nitrogen, aes(x = NC_ratio, y = NE_NO3N_SOM)) + 
   geom_point() +
@@ -1453,6 +1477,9 @@ cor(Nitrogen$NC_ratio, Nitrogen$NE_NO3N_SOM, method = "spearman",
     use = "complete.obs")
 # 0.608635
 
+p2+p1+p3+p4
+ggsave("Total N and mineralisable N by LOI.png",
+       path = "Outputs/Graphs/", width = 25, height = 20, units = "cm")
 
 Nitrogen <- left_join(Nitrogen, select(CS07_PH, -BATCH_NUM))
 
@@ -1477,3 +1504,162 @@ ggplot(Nitrogen, aes(x = NC_ratio, y = NE_NMINTOT_SOM,
 coplot(NC_ratio ~ log(NE_NMINTOT_SOM) | PH2007_IN_WATER, Nitrogen)
 coplot(log(NE_NMINTOT_SOM) ~ NC_ratio | PH2007_IN_WATER, Nitrogen)
 
+
+p1 <- ggplot(Nitrogen, aes(x = NC_ratio, y = PH2007_IN_WATER)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "pH") +
+  geom_smooth(method = "lm", fill = "#3366FF")
+p2 <- ggplot(Nitrogen, aes(x = NE_NMINTOT_SOM, y = PH2007_IN_WATER)) + 
+  geom_point() +
+  labs(x = "Total Mineralisable N (mg N / g LOI)", y = "pH") +
+  scale_x_log10() +
+  geom_smooth(method = "lm", fill = "#3366FF")
+p3 <- ggplot(Nitrogen, aes(x = NE_NMINTOT_SOIL, y = PH2007_IN_WATER)) + 
+  geom_point() +
+  labs(x = "Total Mineralisable N (mg N / g soil)", y = "pH") +
+  scale_x_log10() +
+  geom_smooth(method = "lm", fill = "#3366FF")
+p4 <- ggplot(Nitrogen, aes(x = NE_NO3N_SOM, y = PH2007_IN_WATER)) + 
+  geom_point() +
+  labs(x = "Total NO3-N (mg N / g LOI)", y = "pH") +
+  scale_x_log10() +
+  geom_smooth(method = "lm", fill = "#3366FF")
+p1 + p2 + p3 + p4
+ggsave("pH and N measurements.png", path = "Outputs/Graphs",
+       width = 25, height = 20, units = "cm")
+
+Nitrogen2 <- Nitrogen %>% 
+  left_join(filter(BH_IMP, Year == 2007)) %>%
+  filter(!is.na(Management))
+
+p1 <- ggplot(Nitrogen2, aes(x = NC_ratio, y = PH2007_IN_WATER, colour = Management)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "pH") +
+  geom_smooth(method = "lm", aes(fill = Management))
+p2 <- ggplot(Nitrogen2, aes(x = NE_NMINTOT_SOM, y = PH2007_IN_WATER, colour = Management)) + 
+  geom_point() +
+  labs(x = "Total Mineralisable N (mg N / g LOI)", y = "pH") +
+  scale_x_log10() +
+  geom_smooth(method = "lm", aes(fill = Management))
+p3 <- ggplot(Nitrogen2, aes(x = NE_NMINTOT_SOIL, y = PH2007_IN_WATER, colour = Management)) + 
+  geom_point() +
+  labs(x = "Total Mineralisable N (mg N / g soil)", y = "pH") +
+  scale_x_log10() +
+  geom_smooth(method = "lm", aes(fill = Management))
+p4 <- ggplot(Nitrogen2, aes(x = NE_NO3N_SOM, y = PH2007_IN_WATER, colour = Management)) + 
+  geom_point() +
+  labs(x = "Total NO3-N (mg N / g LOI)", y = "pH") +
+  scale_x_log10() +
+  geom_smooth(method = "lm", aes(fill = Management))
+p1 + p2 + p3 + p4 + plot_layout(guides="collect")
+ggsave("pH and N measurements by Management type.png", path = "Outputs/Graphs",
+       width = 25, height = 20, units = "cm")
+
+Nitrogen3 <- Nitrogen2 %>%
+  left_join(filter(X_Ell, Year == 2007) %>%
+              select(REP_ID, contains("_R_")))
+p1 <- ggplot(Nitrogen3, aes(x = NC_ratio, y = WH_R_W, colour = Management)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "Ellenberg R (full X weighted)") +
+  geom_smooth(method = "lm", aes(fill = Management))
+p2 <- ggplot(Nitrogen3, aes(x = NC_ratio, y = WH_R_UW, colour = Management)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "Ellenberg R (full X unweighted)") +
+  geom_smooth(method = "lm", aes(fill = Management))
+p3 <- ggplot(Nitrogen3, aes(x = NC_ratio, y = SM_R_W, colour = Management)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "Ellenberg R (small X weighted)") +
+  geom_smooth(method = "lm", aes(fill = Management))
+p4 <- ggplot(Nitrogen3, aes(x = NC_ratio, y = SM_R_UW, colour = Management)) + 
+  geom_point() +
+  labs(x = "Total N:C", y = "Ellenberg R (small X unweighted)") +
+  geom_smooth(method = "lm", aes(fill = Management))
+p1+p2+p3+p4+ plot_layout(guides="collect")
+ggsave("Ellenberg R and NC by Management type.png", path = "Outputs/Graphs",
+       width = 25, height = 20, units = "cm")
+
+# Moisture and rainfall and pH ####
+
+# Look at whether soil moisture actually predicted by change in rainfall to
+# evaluate whether change in rainfall is a useful metric
+rain_moist <- cs_survey_rainfall %>% ungroup() %>%
+  mutate(Year = as.numeric(Year)) %>%
+  full_join(MOISTURE)
+
+test <- rain_moist %>% select(-sum_rainfall) %>% 
+  pivot_wider(names_from = Year, values_from = c(mean_rainfall, Moisture)) %>% 
+  mutate(Moisture_diff9807 = Moisture_2007 - Moisture_1998,
+         Moisture_diff0719 = Moisture_2019 - Moisture_2007,
+         rain_diff9807 = mean_rainfall_2007 - mean_rainfall_1998,
+         rain_diff0719 = mean_rainfall_2019 - mean_rainfall_2007) %>%
+  select(REP_ID, contains("diff")) %>%
+  pivot_longer(contains("diff"), names_to = c("Variable","Time_period"),
+               names_sep = "_diff") %>%
+  pivot_wider(names_from = Variable, values_from = value) %>%
+  na.omit()
+
+# Also combine with LOI as moisture highly dependent on SOM
+test <- LOI %>%
+  mutate(LOI_2019 = ifelse(!is.na(LOI_2019), LOI_2019, LOI_2016)) %>%
+  mutate(LOI_diff9807 = LOI_2007 - LOI_1998,
+         LOI_diff0719 = LOI_2019 - LOI_2007) %>%
+  select(REP_ID, contains("diff")) %>%
+  pivot_longer(contains("diff"), names_to = c("Variable","Time_period"),
+               names_sep = "_diff") %>%
+  pivot_wider(names_from = Variable, values_from = value) %>%
+  right_join(test)
+
+ggplot(test, aes(x = rain, y = Moisture)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+ggplot(test, aes(x = LOI, y = Moisture)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+summary(lm(Moisture ~ rain+LOI, test))
+# Moisture difference predicted by rain + LOI difference (19%)
+
+# however we want to predict change in pH
+test2 <- PH_diff_long %>%
+  mutate(Time_period = gsub("diff","",as.character(name))) %>%
+  right_join(test)
+
+ggplot(test2, aes(x = rain, y = pH)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+ggplot(test2, aes(x = LOI, y = pH)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+ggplot(test2, aes(x = Moisture, y = pH)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+summary(lm(pH ~ Moisture*rain*LOI, test2))
+summary(lm(pH ~ Moisture, test2))
+summary(lm(pH ~ rain, test2))
+summary(lm(pH ~ LOI, test2))
+# pretty low variance explained, change in rainfall explained a lot more than
+# change in soil moisture or LOI but still low
+
+# Ran the above for different time windows of rainfall calculation and looked at
+# correlation. This supported initial assumption that 4 months was best based on
+# evidence provided by Don about the upwater monitoring network
+
+# 2 month calculation
+cor(test2$pH, test2$rain, use = "complete.obs")
+# 0.05777657
+
+# 3 month calculation
+cor(test2$pH, test2$rain, use = "complete.obs")
+# [1] 0.08958804
+
+# 4 month calculation
+cor(test2$pH, test2$rain, use = "complete.obs")
+#[1] 0.1373099
+
+# 5 month calculation
+cor(test2$pH, test2$rain, use = "complete.obs")
+# [1] 0.1050855
