@@ -107,7 +107,7 @@ pr <- c(prior(normal(2,0.2), nlpar = "c1"),
 # prior simulation
 mod_pr_only <- brm(bf(Ell_R ~ c1/((1 + exp(-c2*(Soil_pH - c3)))^c4) + c5, 
                       c5 ~ (1|SQNUM), c1 ~ 1, c2 + c3 + c4 ~ YR, nl= TRUE),
-                   data = mod_data, prior = pr, cores = 6, chains = 4,
+                   data = mod_data, prior = pr, cores = 4, chains = 4,
                    sample_prior = "only")
 summary(mod_pr_only)
 plot(mod_pr_only)
@@ -123,7 +123,7 @@ plot(mod_data$Ell_R, pred_modpr[,1])
 # with data
 mod_nl <- brm(bf(Ell_R ~ c1/((1 + exp(-c2*(Soil_pH - c3)))^c4) + c5, 
                  c5 ~ (1|SQNUM), c1 ~ 1, c2 + c3 + c4 ~ YR, nl= TRUE),
-              data = mod_data, prior = pr, cores = 6, chains = 4)
+              data = mod_data, prior = pr, cores = 4, chains = 4)
 summary(mod_nl)
 plot(mod_nl)
 plot(conditional_effects(mod_pr_only))
@@ -132,7 +132,8 @@ pp_check(mod_pr_only)
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ####
-# Ellenberg and pH difference models ####
+# DIFFERENCE MODELS ####
+# Ellenberg and pH difference models
 
 # data manipulation check if just limiting to the 78-98, 98-07 and 07-19 periods
 # is okay in terms of data coverage
@@ -190,13 +191,23 @@ ELL_pH <- PH %>%
   mutate(Year = recode(Time_period,
                        "7898" = 1998,
                        "9807" = 2007,
-                       "0719" = 2019)) %>%
-  left_join(PH_QA_diff) %>%
-  left_join(BH_comb_nodupes) %>%
-  left_join(select(CS_plot_atdep, REP_ID, Year, Ndep, Sdep)) %>%
+                       "0719" = 2019),
+         Year1 = recode(Time_period,
+                        "7898" = 1978,
+                        "9807" = 1998,
+                        "0719" = 2007)) %>%
+  left_join(BH_IMP) %>%
+  left_join(select(CS_plot_atdep, REP_ID, Year, Ndep, Sdep) %>%
+              mutate(Year = ifelse(Year == 2018, 2019, Year))) %>%
   left_join(cs_rainfall_diff) %>%
+  left_join(cs_rainfall_averages) %>%
+  left_join(ELL_QA_diff) %>%
+  left_join(PH_QA_diff) %>%
+  left_join(rename(PH_long, Year1 = Year, Year1_pH = pH, 
+                   Year1_pHCaCl2 = pH_CaCl2)) %>%
+  left_join(rename(PH_long, Year2_pH = pH, 
+                   Year2_pHCaCl2 = pH_CaCl2)) %>%
   left_join(CN)
-
 
 janitor::get_dupes(ELL_pH, Time_period, REP_ID) # no duplicates
 mice::md.pattern(ELL_pH)
@@ -207,15 +218,16 @@ View(filter(ELL_pH, is.na(WH_R_UW) & !is.na(PH)))
 # simple difference model
 # model each Ellenberg R change as a function of pH change 
 mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_W) %>%
-  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, PH) %>%
+         Ell = WH_R_W,
+         Management = ifelse(Management == "High",1,0)) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, PH, Management) %>%
   na.omit()
 
 # normal model response - to show not great
-get_prior(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+get_prior(Ell ~ PH*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
           data = mod_data)
 
 mod_pr <- c(prior(normal(0,0.5), class = "b"),
@@ -223,13 +235,13 @@ mod_pr <- c(prior(normal(0,0.5), class = "b"),
             prior(normal(0.4,0.2), class = "ar"),
             prior(student_t(3,0,1), class = "sd"),
             prior(student_t(3,0,1), class = "sigma"))
-normal_mod <- brm(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                  data = mod_data, prior = mod_pr,
-                  cores = 6, iter = 5000)
-pp_check(test_mod, nsamples = 50) + scale_x_continuous(limits =c(-5,5))
+normal_mod <- brm(Ell ~ PH*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+                  data = mod_data, prior = mod_pr, sample_prior = "only",
+                  cores = 4, iter = 5000)
+pp_check(normal_mod, nsamples = 50) + scale_x_continuous(limits =c(-5,5))
 
 # prior checks
-get_prior(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+get_prior(Ell ~ PH*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
           family = "student", data = mod_data)
 
 mod_pr <- c(prior(normal(0,0.5), class = "b"),
@@ -240,104 +252,158 @@ mod_pr <- c(prior(normal(0,0.5), class = "b"),
             prior(student_t(3,0,1), class = "sigma"))
 
 # prior predictive check
-prior_mod <- brm(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+prior_mod <- brm(Ell ~ PH*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
                  family = "student", sample_prior = "only",
-                 data = mod_data, prior = mod_pr, cores = 6, iter = 5000)
+                 data = mod_data, prior = mod_pr, cores = 4, iter = 5000)
 summary(prior_mod)
 pp_check(prior_mod, nsamples = 50)
 # underestimates peak at 0 on average but gets close
 
 # ellenberg R model - weighted Ellenberg R for whole plot
-ell_ph_diff <- brm(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+ell_ph_diff <- brm(Ell ~ PH*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
                    data = mod_data, prior = mod_pr, family = "student",
-                   cores = 6, iter = 5000, 
-                   file = "Outputs/Models/Difference/EllR_WHW_PH")
+                   cores = 4, iter = 5000, control = list(adapt_delta = 0.99),
+                   file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_WHW_PH_HAB")
 summary(ell_ph_diff)
-plot(ell_ph_diff, plot = FALSE)
+plot(ell_ph_diff, ask = FALSE)
 pp_check(ell_ph_diff)
 
 # unweighted ellenberg r whole plot
 mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_UW) %>%
-  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, PH) %>%
+         Ell = WH_R_UW,
+         Management = ifelse(Management == "High",1,0)) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, PH, Management) %>%
   na.omit() 
-ell_ph_diffuw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
-                        file = "Outputs/Models/Difference/EllR_WHUW_PH",
+ell_ph_diffuw <- update(ell_ph_diff, newdata = mod_data, cores=4, iter = 5000,
+                        file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_WHUW_PH_HAB",
                         control = list(adapt_delta = 0.95))
 summary(ell_ph_diffuw)
-plot(ell_ph_diffuw, plot = FALSE)
+plot(ell_ph_diffuw, ask = FALSE)
 pp_check(ell_ph_diffuw)
 
 
 # weighted ellenberg r small plot
 mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = SM_R_W) %>%
-  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, PH) %>%
+         Ell = SM_R_W,
+         Management = ifelse(Management == "High",1,0)) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, PH, Management) %>%
   na.omit() 
-ell_ph_diffsmw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
-                         file = "Outputs/Models/Difference/EllR_SMW_PH",
+ell_ph_diffsmw <- update(ell_ph_diff, newdata = mod_data, cores = 4, iter = 5000,
+                         file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_SMW_PH_HAB",
                          control = list(adapt_delta = 0.95))
 summary(ell_ph_diffsmw)
-plot(ell_ph_diffsmw, plot = FALSE)
+plot(ell_ph_diffsmw, ask = FALSE)
 pp_check(ell_ph_diffsmw)
 
 # weighted ellenberg r small plot
 mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = SM_R_UW) %>%
-  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, PH) %>%
+         Ell = SM_R_UW,
+         Management = ifelse(Management == "High",1,0)) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, PH, Management) %>%
   na.omit() 
-ell_ph_diffsmuw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
+ell_ph_diffsmuw <- update(ell_ph_diff, newdata = mod_data, cores = 4, iter = 5000,
                           control = list(adapt_delta = 0.95),
-                          file = "Outputs/Models/Difference/EllR_SMUW_PH")
+                          file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_SMUW_PH_HAB")
 summary(ell_ph_diffsmuw)
-plot(ell_ph_diffsmuw, plot = FALSE)
+plot(ell_ph_diffsmuw, ask = FALSE)
 pp_check(ell_ph_diffsmuw)
 
 
 # Plot for comparing pH effects on different Ellenberg R scores
-ph_fixef <- rbind(fixef(ell_ph_diff),
-                  fixef(ell_ph_diffuw),
-                  fixef(ell_ph_diffsmw),
-                  fixef(ell_ph_diffsmuw)) %>%
-  as.data.frame() %>%
-  cbind(score = rep(c("Weighted full",
-                      "Unweighted full",
-                      "Weighted small",
-                      "Unweighted small"), each = 2)) %>%
-  cbind(Variable = rep(c("Intercept","pH"), 4)) %>%
-  as.data.frame()
+nd <- 
+  tibble(PH = seq(from = -3.25, to = 3.5, length.out = 30) %>% 
+           rep(., times = 2),
+         Management = rep(0:1, each = 30),
+         YRnm = 1,
+         REP_ID = 1:60)
 
-ggplot(filter(ph_fixef, Variable == "pH"), 
-       aes(x = score, y = Estimate)) +
-  geom_pointrange(aes(ymin = Q2.5, ymax = Q97.5)) +
-  geom_linerange(aes(ymin = Estimate - Est.Error, 
-                     ymax = Estimate + Est.Error),
-                 size = 1.5) + 
-  scale_y_continuous(limits =c(0,0.11), expand = c(0,0)) +
-  labs(x = "", y = "Effect of change in pH upon Ellenberg R")
+f <- do.call(rbind, list(
+  fitted(ell_ph_diff, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Weighted full"),
+  fitted(ell_ph_diffuw, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Unweighted full"),
+  fitted(ell_ph_diff, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Weighted small"),
+  fitted(ell_ph_diff, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Unweighted small")
+))
+
+plot_dat <- ELL_pH %>% 
+  select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
+         PH,Management, REP_ID, Time_period) %>%
+  filter(!is.na(Management)) %>%
+  pivot_longer(contains("_R_"), names_to = "Response") %>%
+  mutate(Response = recode(Response,
+                           "WH_R_W" = "Weighted full",
+                           "WH_R_UW" = "Unweighted full",
+                           "SM_R_W" = "Weighted small",
+                           "SM_R_UW" = "Unweighted small"),
+         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
+
+ggplot(plot_dat) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_smooth(data = f,
+              aes(x = PH,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/4, size = 1/2) +
+  facet_wrap(~Response) +
+  labs(x = "pH", y = "Ellenberg R") +
+  scale_x_continuous(expand = c(0,0))
 ggsave("pH effect on Ellenberg R score versions.png",
-       path = "Outputs/Models/Difference", 
-       width = 12, height = 12, units = "cm")
+       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+       width = 16, height = 12, units = "cm")
+
+ggplot(plot_dat) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_point(aes(x = PH, y = value, colour = Management),
+             alpha = 0.2) +
+  geom_smooth(data = f,
+              aes(x = PH,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/4, size = 1/2) +
+  facet_wrap(~Response) +
+  labs(x = "pH", y = "Ellenberg R") +
+  scale_x_continuous(expand = c(0,0))
+ggsave("pH effect on Ellenberg R score versions with data.png",
+       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+       width = 16, height = 12, units = "cm")
+
 
 # ** pH diw vs cacl2 comparison ####
 # only one time transition so no temporal autocorrelation included
 mod_data <- ELL_pH %>%
   mutate(SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_W) %>%
-  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, Ell, PH, PHC) %>%
+         Ell = WH_R_W,
+         Management = ifelse(Management == "High",1,0)) %>%
+  select(REP_ID, SQUARE, Ell, PH, PHC, Management) %>%
   na.omit()
 
-get_prior(Ell ~ PH + (1|SQUARE),
+get_prior(Ell ~ PH*Management + (1|SQUARE),
           data = mod_data)
 
 mod_pr <- c(prior(normal(0,0.5), class = "b"),
@@ -345,128 +411,470 @@ mod_pr <- c(prior(normal(0,0.5), class = "b"),
             prior(student_t(3,0,1), class = "sd"),
             prior(student_t(3,0,1), class = "sigma"))
 
-ell_ph_diff <- brm(Ell ~ PH + (1|SQUARE), family = "student",
-                   data = mod_data, prior = mod_pr, cores = 6, iter = 5000, 
-                   file = "Outputs/Models/Difference/EllR_WHW_PH_0719only",
-                   save_all_pars = TRUE, control = list(adapt_delta = 0.95))
+ell_ph_diff <- brm(Ell ~ PH*Management + (1|SQUARE), family = "student",
+                   data = mod_data, prior = mod_pr, cores = 4, iter = 5000, 
+                   file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_WHW_PH_HAB_0719only",
+                   save_pars = save_pars(all = TRUE), control = list(adapt_delta = 0.95))
 summary(ell_ph_diff)
-plot(ell_ph_diff)
+plot(ell_ph_diff, ask = FALSE)
 pp_check(ell_ph_diff)
-ell_ph_diff <- add_criterion(ell_ph_diff, "loo", moment_match = TRUE, reloo = TRUE)
+ell_ph_diff <- add_criterion(ell_ph_diff, "loo", moment_match = TRUE, reloo = TRUE,
+                             file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_WHW_PH_HAB_0719only")
 
-ell_phc_diff <- brm(Ell ~ PHC + (1|SQUARE), family = "student",
-                    data = mod_data, prior = mod_pr, cores = 6, iter = 5000, 
-                    file = "Outputs/Models/Difference/EllR_WHW_PHC_0719only",
-                    save_all_pars = TRUE,  control = list(adapt_delta = 0.95))
+ell_phc_diff <- brm(Ell ~ PHC*Management + (1|SQUARE), family = "student",
+                    data = mod_data, prior = mod_pr, cores = 4, iter = 5000, 
+                    file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_WHW_PHC_HAB_0719only",
+                    save_pars = save_pars(all = TRUE),  control = list(adapt_delta = 0.95))
 summary(ell_phc_diff)
-plot(ell_phc_diff)
+plot(ell_phc_diff, ask = FALSE)
 pp_check(ell_phc_diff)
 ell_phc_diff <- add_criterion(ell_phc_diff, "loo", moment_match = TRUE, reloo = TRUE,
-                              file = "Outputs/Models/Difference/EllR_WHW_PHC_0719only")
+                              file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_WHW_PHC_HAB_0719only")
 
 loo_compare(ell_ph_diff, ell_phc_diff)
 #               elpd_diff se_diff
 # ell_phc_diff  0.0       0.0   
-# ell_ph_diff  -0.5       1.2
+# ell_ph_diff  -0.5       1.5
 
 # unweighted ellenberg r whole plot
 mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_UW) %>%
-  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, PH, PHC) %>%
+         Ell = WH_R_UW,
+         Management = ifelse(Management == "High",1,0)) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, PH, PHC, Management) %>%
   na.omit()
-ell_ph_diffuw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
-                        file = "Outputs/Models/Difference/EllR_WHUW_PH_0719only")
+ell_ph_diffuw <- update(ell_ph_diff, newdata = mod_data, cores = 4, iter = 5000,
+                        file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_WHUW_PH_HAB_0719only")
 summary(ell_ph_diffuw)
-plot(ell_ph_diffuw)
+plot(ell_ph_diffuw, ask = FALSE)
 pp_check(ell_ph_diffuw)
 ell_ph_diffuw <- add_criterion(ell_ph_diffuw, "loo", moment_match = TRUE, reloo = TRUE,
-                               file = "Outputs/Models/Difference/EllR_WHUW_PH_0719only")
+                               file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_WHUW_PH_HAB_0719only")
 
-ell_phc_diffuw <- update(ell_phc_diff, newdata = mod_data, cores=6, iter = 5000,
-                         file = "Outputs/Models/Difference/EllR_WHUW_PHC_0719only")
+ell_phc_diffuw <- update(ell_phc_diff, newdata = mod_data, cores = 4, iter = 5000,
+                         file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_WHUW_PHC_HAB_0719only")
 summary(ell_phc_diffuw)
-plot(ell_phc_diffuw)
+plot(ell_phc_diffuw, ask = FALSE)
 pp_check(ell_phc_diffuw)
 ell_phc_diffuw <- add_criterion(ell_phc_diffuw, "loo", moment_match = TRUE, reloo = TRUE,
-                                file = "Outputs/Models/Difference/EllR_WHUW_PHC_0719only")
+                                file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_WHUW_PHC_HAB_0719only")
 
 loo_compare(ell_ph_diffuw, ell_phc_diffuw)
 # elpd_diff se_diff
-# ell_ph_diffuw   0.0       0.0   
-# ell_phc_diffuw -0.4       0.5  
+# ell_phc_diffuw  0.0       0.0   
+# ell_ph_diffuw  -0.2       1.1  
 
 # weighted ellenberg r small plot
 mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = SM_R_W) %>%
-  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, PH, PHC) %>%
+         Ell = SM_R_W,
+         Management = ifelse(Management == "High",1,0)) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, PH, PHC, Management) %>%
   na.omit()
-ell_ph_diffsmw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
-                         file = "Outputs/Models/Difference/EllR_SMW_PH_0719only")
+ell_ph_diffsmw <- update(ell_ph_diff, newdata = mod_data, cores = 4, iter = 5000,
+                         file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_SMW_PH_HAB_0719only")
 summary(ell_ph_diffsmw)
-plot(ell_ph_diffsmw)
+plot(ell_ph_diffsmw, ask = FALSE)
 pp_check(ell_ph_diffsmw)
 ell_ph_diffsmw <- add_criterion(ell_ph_diffsmw, "loo", moment_match = TRUE, reloo = TRUE,
-                                file = "Outputs/Models/Difference/EllR_SMW_PH_0719only")
+                                file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_SMW_PH_HAB_0719only")
 
-ell_phc_diffsmw <- update(ell_phc_diff, newdata = mod_data, cores=6, iter = 5000,
-                          file = "Outputs/Models/Difference/EllR_SMW_PHC_0719only")
+ell_phc_diffsmw <- update(ell_phc_diff, newdata = mod_data, cores = 4, iter = 5000,
+                          file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_SMW_PHC_HAB_0719only")
 summary(ell_phc_diffsmw)
-plot(ell_phc_diffsmw)
+plot(ell_phc_diffsmw, ask = FALSE)
 pp_check(ell_phc_diffsmw)
 ell_phc_diffsmw <- add_criterion(ell_phc_diffsmw, "loo", moment_match = TRUE, reloo = TRUE,
-                                 file = "Outputs/Models/Difference/EllR_SMW_PHC_0719only")
+                                 file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_SMW_PHC_HAB_0719only")
 
 loo_compare(ell_ph_diffsmw, ell_phc_diffsmw)
-#                 elpd_diff se_diff
+# elpd_diff se_diff
 # ell_ph_diffsmw   0.0       0.0   
-# ell_phc_diffsmw -0.8       1.3
+# ell_phc_diffsmw -0.7       1.9   
 
 # unweighted ellenberg r small plot
 mod_data <- ELL_pH %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = SM_R_UW) %>%
-  filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, PH, PHC) %>%
+         Ell = SM_R_UW,
+         Management = ifelse(Management == "High",1,0)) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, PH, PHC, Management) %>%
   na.omit()
-ell_ph_diffsmuw <- update(ell_ph_diff, newdata = mod_data, cores=6, iter = 5000,
-                          file = "Outputs/Models/Difference/EllR_SMUW_PH_0719only")
+ell_ph_diffsmuw <- update(ell_ph_diff, newdata = mod_data, cores = 4, iter = 5000,
+                          file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_SMUW_PH_HAB_0719only")
 summary(ell_ph_diffsmuw)
-plot(ell_ph_diffsmuw)
+plot(ell_ph_diffsmuw, ask = FALSE)
 pp_check(ell_ph_diffsmuw)
 ell_ph_diffsmuw <- add_criterion(ell_ph_diffsmuw, "loo", moment_match = TRUE, reloo = TRUE,
-                                 file = "Outputs/Models/Difference/EllR_SMUW_PH_0719only")
+                                 file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_SMUW_PH_HAB_0719only")
 
-ell_phc_diffsmuw <- update(ell_phc_diff, newdata = mod_data, cores=6, iter = 5000,
-                           file = "Outputs/Models/Difference/EllR_SMUW_PHC_0719only")
+ell_phc_diffsmuw <- update(ell_phc_diff, newdata = mod_data, cores = 4, iter = 5000,
+                           file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_SMUW_PHC_HAB_0719only")
 summary(ell_phc_diffsmuw)
-plot(ell_phc_diffsmuw)
+plot(ell_phc_diffsmuw, ask = FALSE)
 pp_check(ell_phc_diffsmuw)
 ell_phc_diffsmuw <- add_criterion(ell_phc_diffsmuw, "loo", moment_match = TRUE, reloo = TRUE,
-                                  file = "Outputs/Models/Difference/EllR_SMUW_PHC_0719only")
+                                  file = "Outputs/Models/Difference/pH DIW vs pH CaCl2/EllR_SMUW_PHC_HAB_0719only")
 
 loo_compare(ell_ph_diffsmuw, ell_phc_diffsmuw)
-#                   elpd_diff se_diff
-# ell_ph_diffsmuw   0.0       0.0   
-# ell_phc_diffsmuw -0.8       1.0 
+# elpd_diff se_diff
+# ell_ph_diffsmuw  0.0       0.0    
+# ell_phc_diffsmuw 0.0       1.1
 
 # Change in pH (DIW) and change in pH (CaCl2) equivalent predictors of Ellenberg
 # R change. 
 
-# Strength of relationship for pH:
-# small weighted > large weighted > small unweighted > large unweighted
-# for pH (CaCl2)
-# large weighted ~= small weighted > small unweighted > large unweighted
+bayes_R2(ell_ph_diff) #0.087
+bayes_R2(ell_ph_diffuw) #0.174
+bayes_R2(ell_ph_diffsmw) #0.098
+bayes_R2(ell_ph_diffsmuw) #0.047
 
-# unweighted Ell R scores show very little relationship with pH change (95% overlaps 0)  
+bayes_R2(ell_phc_diff) #0.088
+bayes_R2(ell_phc_diffuw) #0.181
+bayes_R2(ell_phc_diffsmw) #0.099
+bayes_R2(ell_phc_diffsmuw) #0.045
+
+# Strength of relationship for both pH DIW and CaCl2:
+# large unweighted > small weighted > large weighted > small unweighted
+
+# Atmospheric Deposition ####
+## ** Sdep ####
+# model each Ellenberg R change as a function of Sdep
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = WH_R_W,
+         Management = ifelse(Management == "High",1,0),
+         Sdep = as.numeric(scale(Sdep))) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, Sdep, Management) %>%
+  na.omit()
+
+# prior checks
+get_prior(Ell ~ Sdep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+          family = "student", data = mod_data)
+
+mod_pr <- c(prior(normal(0,0.5), class = "b"),
+            prior(normal(0,0.25), class = "Intercept"),
+            prior(gamma(2,0.1), class = "nu"),
+            prior(normal(0.4,0.2), class = "ar"),
+            prior(student_t(3,0,1), class = "sd"),
+            prior(student_t(3,0,1), class = "sigma"))
+
+# prior predictive check model
+prior_mod <- brm(Ell ~ Sdep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+                 family = "student", sample_prior = "only",
+                 data = mod_data, prior = mod_pr, cores = 4, iter = 5000)
+summary(prior_mod)
+pp_check(prior_mod, nsamples = 50)
+# underestimates peak at 0 on average but gets close
+
+# ellenberg R model - weighted Ellenberg R for whole plot
+ell_Sdep_diff <- brm(Ell ~ Sdep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+                     data = mod_data, prior = mod_pr, family = "student",
+                     cores = 4, iter = 5000, 
+                     file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_WHW_Sdep_HAB")
+summary(ell_Sdep_diff)
+plot(ell_Sdep_diff, ask = FALSE)
+pp_check(ell_Sdep_diff)
+
+# unweighted ellenberg r whole plot
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = WH_R_UW,
+         Management = ifelse(Management == "High",1,0),
+         Sdep = as.numeric(scale(Sdep))) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, Sdep, Management) %>%
+  na.omit() 
+ell_Sdep_diffuw <- update(ell_Sdep_diff, newdata = mod_data, cores=4, iter = 5000,
+                          file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_WHUW_Sdep_HAB")
+summary(ell_Sdep_diffuw)
+plot(ell_Sdep_diffuw, ask = FALSE)
+pp_check(ell_Sdep_diffuw)
 
 
+# weighted ellenberg r small plot
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = SM_R_W,
+         Management = ifelse(Management == "High",1,0),
+         Sdep = as.numeric(scale(Sdep))) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, Sdep, Management) %>%
+  na.omit() 
+ell_Sdep_diffsmw <- update(ell_Sdep_diff, newdata = mod_data, cores=4, iter = 5000,
+                           control = list(adapt_delta = 0.99),
+                           file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_SMW_Sdep_HAB")
+summary(ell_Sdep_diffsmw)
+plot(ell_Sdep_diffsmw, ask = FALSE)
+pp_check(ell_Sdep_diffsmw)
+
+# weighted ellenberg r small plot
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = SM_R_UW,
+         Management = ifelse(Management == "High",1,0),
+         Sdep = as.numeric(scale(Sdep))) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, Sdep, Management) %>%
+  na.omit() 
+ell_Sdep_diffsmuw <- update(ell_Sdep_diff, newdata = mod_data, cores=4, iter = 5000,
+                            control = list(adapt_delta = 0.99),
+                            file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_SMUW_Sdep_HAB")
+summary(ell_Sdep_diffsmuw)
+plot(ell_Sdep_diffsmuw, ask = FALSE)
+pp_check(ell_Sdep_diffsmuw)
+
+
+# Plot for comparing Sdep effects on different Ellenberg R scores
+nd <- 
+  tibble(Sdep = seq(from = -5.5, to = 2, length.out = 30) %>% 
+           rep(., times = 2),
+         Management = rep(0:1, each = 30),
+         YRnm = 1,
+         REP_ID = 1:60)
+
+f <- do.call(rbind, list(
+  fitted(ell_Sdep_diff, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Weighted full"),
+  fitted(ell_Sdep_diffuw, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Unweighted full"),
+  fitted(ell_Sdep_diff, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Weighted small"),
+  fitted(ell_Sdep_diff, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Unweighted small")
+))
+
+plot_dat <- ELL_pH %>% 
+  select(WH_R_W, WH_R_UW, SM_R_W, SM_R_UW,
+         Sdep, Management, REP_ID, Time_period) %>%
+  filter(!is.na(Management)) %>%
+  pivot_longer(contains("_R_"), names_to = "Response") %>%
+  mutate(Sdep = as.numeric(scale(Sdep)),
+         Response = recode(Response,
+                           "WH_R_W" = "Weighted full",
+                           "WH_R_UW" = "Unweighted full",
+                           "SM_R_W" = "Weighted small",
+                           "SM_R_UW" = "Unweighted small"),
+         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
+
+ggplot(plot_dat) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_smooth(data = f,
+              aes(x = Sdep,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/4, size = 1/2) +
+  facet_wrap(~Response) +
+  labs(x = "S deposition", y = "Ellenberg R") +
+  scale_x_continuous(expand = c(0,0))
+ggsave("Sdep effect on Ellenberg R score versions.png",
+       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+       width = 16, height = 12, units = "cm")
+
+ggplot(plot_dat) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_point(aes(x = Sdep, y = value, colour = Management),
+             alpha = 0.2) +
+  geom_smooth(data = f,
+              aes(x = Sdep,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/4, size = 1/2) +
+  facet_wrap(~Response) +
+  labs(x = "Sdep", y = "Ellenberg R") +
+  scale_x_continuous(expand = c(0,0))
+ggsave("Sdep effect on Ellenberg R score versions with data.png",
+       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+       width = 16, height = 12, units = "cm")
+
+# ** Ndep ####
+# model each Ellenberg R change as a function of Ndep
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = WH_R_W,
+         Management = ifelse(Management == "High",1,0),
+         Ndep = as.numeric(scale(Ndep))) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, Ndep, Management) %>%
+  na.omit()
+
+# prior checks
+get_prior(Ell ~ Ndep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+          family = "student", data = mod_data)
+
+mod_pr <- c(prior(normal(0,0.5), class = "b"),
+            prior(normal(0,0.25), class = "Intercept"),
+            prior(gamma(2,0.1), class = "nu"),
+            prior(normal(0.4,0.2), class = "ar"),
+            prior(student_t(3,0,1), class = "sd"),
+            prior(student_t(3,0,1), class = "sigma"))
+
+# prior predictive check model
+prior_mod <- brm(Ell ~ Ndep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+                 family = "student", sample_prior = "only",
+                 data = mod_data, prior = mod_pr, cores = 4, iter = 5000)
+summary(prior_mod)
+pp_check(prior_mod, nsamples = 50)
+# underestimates peak at 0 on average but gets close
+
+# ellenberg R model - weighted Ellenberg R for whole plot
+ell_Ndep_diff <- brm(Ell ~ Ndep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+                     data = mod_data, prior = mod_pr, family = "student",
+                     cores = 4, iter = 5000, 
+                     file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_WHW_Ndep_HAB")
+summary(ell_Ndep_diff)
+plot(ell_Ndep_diff, ask = FALSE)
+pp_check(ell_Ndep_diff)
+
+# unweighted ellenberg r whole plot
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = WH_R_UW,
+         Management = ifelse(Management == "High",1,0),
+         Ndep = as.numeric(scale(Ndep))) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, Ndep, Management) %>%
+  na.omit() 
+ell_Ndep_diffuw <- update(ell_Ndep_diff, newdata = mod_data, cores=4, iter = 5000,
+                          file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_WHUW_Ndep_HAB")
+summary(ell_Ndep_diffuw)
+plot(ell_Ndep_diffuw, ask = FALSE)
+pp_check(ell_Ndep_diffuw)
+
+
+# weighted ellenberg r small plot
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = SM_R_W,
+         Management = ifelse(Management == "High",1,0),
+         Ndep = as.numeric(scale(Ndep))) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, Ndep, Management) %>%
+  na.omit() 
+ell_Ndep_diffsmw <- update(ell_Ndep_diff, newdata = mod_data, cores = 4, iter = 5000,
+                           control = list(adapt_delta = 0.99),
+                           file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_SMW_Ndep_HAB")
+summary(ell_Ndep_diffsmw)
+plot(ell_Ndep_diffsmw, ask = FALSE)
+pp_check(ell_Ndep_diffsmw)
+
+# unweighted ellenberg r small plot
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = SM_R_UW,
+         Management = ifelse(Management == "High",1,0),
+         Ndep = as.numeric(scale(Ndep))) %>%
+  select(REP_ID, SQUARE, YRnm, Ell, Ndep, Management) %>%
+  na.omit() 
+ell_Ndep_diffsmuw <- update(ell_Ndep_diff, newdata = mod_data, cores = 4, iter = 5000,
+                            control = list(adapt_delta = 0.99),
+                            file = "Outputs/Models/Difference/Univariate_nomeaserror/EllR_SMUW_Ndep_HAB")
+summary(ell_Ndep_diffsmuw)
+plot(ell_Ndep_diffsmuw, ask = FALSE)
+pp_check(ell_Ndep_diffsmuw)
+
+
+# Plot for comparing Ndep effects on different Ellenberg R scores
+nd <- 
+  tibble(Ndep = seq(from = -2, to = 5.5, length.out = 30) %>% 
+           rep(., times = 2),
+         Management = rep(0:1, each = 30),
+         YRnm = 1,
+         REP_ID = 1:60)
+
+f <- do.call(rbind, list(
+  fitted(ell_Ndep_diff, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Weighted full"),
+  fitted(ell_Ndep_diffuw, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Unweighted full"),
+  fitted(ell_Ndep_diff, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Weighted small"),
+  fitted(ell_Ndep_diff, newdata = nd, re_formula = NA) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Unweighted small")
+))
+
+plot_dat <- ELL_pH %>% 
+  select(WH_R_W, WH_R_UW, SM_R_W, SM_R_UW,
+         Ndep, Management, REP_ID, Time_period) %>%
+  filter(!is.na(Management)) %>%
+  pivot_longer(contains("_R_"), names_to = "Response") %>%
+  mutate(Ndep = as.numeric(scale(Ndep)),
+         Response = recode(Response,
+                           "WH_R_W" = "Weighted full",
+                           "WH_R_UW" = "Unweighted full",
+                           "SM_R_W" = "Weighted small",
+                           "SM_R_UW" = "Unweighted small"),
+         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
+
+ggplot(plot_dat) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_smooth(data = f,
+              aes(x = Ndep,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/4, size = 1/2) +
+  facet_wrap(~Response) +
+  labs(x = "N deposition", y = "Ellenberg R") +
+  scale_x_continuous(expand = c(0,0))
+ggsave("Ndep effect on Ellenberg R score versions.png",
+       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+       width = 16, height = 12, units = "cm")
+
+ggplot(plot_dat) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_point(aes(x = Ndep, y = value, colour = Management),
+             alpha = 0.2) +
+  geom_smooth(data = f,
+              aes(x = Ndep,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/4, size = 1/2) +
+  facet_wrap(~Response) +
+  labs(x = "Ndep", y = "Ellenberg R") +
+  scale_x_continuous(expand = c(0,0))
+ggsave("Ndep effect on Ellenberg R score versions with data.png",
+       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+       width = 16, height = 12, units = "cm")
 
 # Multivariate ####
 # Combine pH and Ellenberg R with original pH and rain differences
@@ -488,45 +896,36 @@ ELL_pH <- PH %>%
                         "7898" = 1978,
                         "9807" = 1998,
                         "0719" = 2007)) %>%
-  left_join(BH_comb_nodupes) %>%
+  left_join(BH_IMP) %>%
   left_join(select(CS_plot_atdep, REP_ID, Year, Ndep, Sdep) %>%
               mutate(Year = ifelse(Year == 2018, 2019, Year))) %>%
   left_join(cs_rainfall_diff) %>%
   left_join(cs_rainfall_averages) %>%
+  left_join(ELL_QA_diff) %>%
   left_join(PH_QA_diff) %>%
   left_join(rename(PH_long, Year1 = Year, Year1_pH = pH, 
                    Year1_pHCaCl2 = pH_CaCl2)) %>%
+  left_join(rename(PH_long, Year2_pH = pH, 
+                   Year2_pHCaCl2 = pH_CaCl2)) %>%
   left_join(CN)
 summary(ELL_pH)
 mice::md.pattern(ELL_pH)
 
 # run model with rain differences
-ELL_pH_7807 <- filter(ELL_pH, Year != 2019) %>%
-  select(-PHC, -PH_CACL2_SE, -Year1_pHCaCl2)
-janitor::get_dupes(ELL_pH_7807, REP_ID, Time_period)
-mice::md.pattern(ELL_pH_7807)
-
-
-mod_data <- ELL_pH_7807 %>%
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_W,
-         Habitat = ifelse(BH %in% c(7,8,9,10,11,12,15,16,23), "Semi-natural",
-                          ifelse(BH %in% c(3,4,5,6), "Improved",
-                                 ifelse(BH %in% c(1,2), "Woodland",NA)))) %>%
-  # filter(!BH %in% c(4,3,2,5,20,21,14,22,13,18,19,17)) %>%
-  filter(!is.na(Habitat)) %>%
-  select(REP_ID, SQUARE, YRnm, Habitat, Ell, Sdep, Ndep,
-         fieldseason_rain, Year1_pH, PH, PH_DIW_SE, 
-         N = N_PERCENT, C = C_PERCENT) %>%
+         Ell = WH_R_W, ELL_SE = ELL_WH_W_SE) %>%
+  select(REP_ID, SQUARE, YRnm, Management, Ell, ELL_SE, Sdep, Ndep,
+         fieldseason_rain, Year2_pH, PH, PH_DIW_SE, 
+         N = NC_RATIO) %>%
   mutate(Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
-         fieldseason_rain = as.numeric(scale(fieldseason_rain)),
-         ELL_SE = 0.16,
-         C = as.numeric(scale(log(C))),
-         N = log(N)) %>%
+         N = as.numeric(scale(N)), 
+         fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
-# 1085 obs
+# 1237 obs
 
 get_prior(bf(Ell | se(ELL_SE, sigma = TRUE) ~ me(PH,PH_DIW_SE,YRnm)*Year1_pH + (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID),
              family = "student") +
@@ -552,7 +951,7 @@ mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
 # prior predictive check
 prior_mod <- brm(v, 
                  sample_prior = "only",
-                 data = mod_data, prior = mod_pr, cores = 6, iter = 5000)
+                 data = mod_data, prior = mod_pr, cores = 4, iter = 5000)
 summary(prior_mod)
 pp_check(prior_mod, nsamples = 50, resp = "Ell")
 pp_check(prior_mod, nsamples = 50, resp = "PH")
@@ -593,7 +992,7 @@ prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH)*Year1_pH + (1|p|SQUARE) + ar(time 
                         ar(time = YRnm, gr = REP_ID), family = "student") + 
                    set_rescor(FALSE),
                  sample_prior = "only", save_all_pars = TRUE, save_mevars = TRUE,
-                 data = mod_data, prior = mod_pr, cores = 6, iter = 5000)
+                 data = mod_data, prior = mod_pr, cores = 4, iter = 5000)
 summary(prior_mod)
 pp_check(prior_mod, nsamples = 50, resp = "Ell")
 pp_check(prior_mod, nsamples = 50, resp = "PH")
@@ -615,7 +1014,7 @@ phell_mod <- brm(bf(Ell | se(ELL_SE, sigma = TRUE) ~ PH*Year1_pH + (1|p|SQUARE) 
                    bf(PH | se(PH_DIW_SE, sigma = TRUE) ~ Sdep + fieldseason_rain + (1|p|SQUARE) + 
                         ar(time = YRnm, gr = REP_ID, cov = TRUE), family = "student") +
                    set_rescor(FALSE),  save_all_pars = TRUE,
-                 data = mod_data, prior = mod_pr, cores = 6, iter = 5000,
+                 data = mod_data, prior = mod_pr, cores = 4, iter = 5000,
                  file = "Outputs/Models/Difference/WH_R_W/Ell_PH_multi_pHint_Sdepfieldrain")
 summary(phell_mod)
 plot(phell_mod)
@@ -633,7 +1032,7 @@ phell_mod_noint <- brm(bf(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
                          bf(PH ~ Sdep + fieldseason_rain + (1|SQUARE) + 
                               ar(time = YRnm, gr = REP_ID), family = "student") +
                          set_rescor(FALSE),  save_all_pars = TRUE, 
-                       data = mod_data, prior = mod_pr, cores = 6, iter = 5000,
+                       data = mod_data, prior = mod_pr, cores = 4, iter = 5000,
                        file = "Outputs/Models/Difference/Ell_PH_multi_pH_Sdepfieldrain")
 summary(phell_mod_noint)
 plot(phell_mod_noint)
@@ -656,7 +1055,7 @@ phell_mod_norain <- brm(bf(Ell ~ PH*Year1_pH + (1|SQUARE) + ar(time = YRnm, gr =
                           bf(PH ~ Sdep + (1|SQUARE) + 
                                ar(time = YRnm, gr = REP_ID), family = "student") +
                           set_rescor(FALSE),  save_all_pars = TRUE,
-                        data = mod_data, prior = mod_pr, cores = 6, iter = 5000,
+                        data = mod_data, prior = mod_pr, cores = 4, iter = 5000,
                         file = "Outputs/Models/Difference/Ell_PH_multi_pHint_Sdep")
 summary(phell_mod_norain)
 plot(phell_mod_norain)
@@ -675,7 +1074,7 @@ phell_mod_nointrain <- brm(bf(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_I
                              bf(PH ~ Sdep + (1|SQUARE) + 
                                   ar(time = YRnm, gr = REP_ID), family = "student") +
                              set_rescor(FALSE),  save_all_pars = TRUE,
-                           data = mod_data, prior = mod_pr, cores = 6, iter = 5000,
+                           data = mod_data, prior = mod_pr, cores = 4, iter = 5000,
                            file = "Outputs/Models/Difference/Ell_PH_multi_pH_Sdep")
 summary(phell_mod_nointrain)
 plot(phell_mod_nointrain)
@@ -700,7 +1099,7 @@ phell_mod_nointsdep <- brm(bf(Ell ~ PH + (1|SQUARE) + ar(time = YRnm, gr = REP_I
                              bf(PH ~ fieldseason_rain + (1|SQUARE) + 
                                   ar(time = YRnm, gr = REP_ID), family = "student") +
                              set_rescor(FALSE),  save_all_pars = TRUE,
-                           data = mod_data, prior = mod_pr, cores = 6, iter = 5000,
+                           data = mod_data, prior = mod_pr, cores = 4, iter = 5000,
                            file = "Outputs/Models/Difference/Ell_PH_multi_pH_rain")
 summary(phell_mod_nointsdep)
 plot(phell_mod_nointsdep)
@@ -733,7 +1132,7 @@ phell_mod_noint_sdep <- brm(bf(Ell ~ PH + Sdep + (1|SQUARE) + ar(time = YRnm, gr
                               bf(PH ~ Sdep + fieldseason_rain + (1|SQUARE) + 
                                    ar(time = YRnm, gr = REP_ID), family = "student") +
                               set_rescor(FALSE),  save_all_pars = TRUE,
-                            data = mod_data, prior = mod_pr, cores = 6, iter = 5000,
+                            data = mod_data, prior = mod_pr, cores = 4, iter = 5000,
                             file = "Outputs/Models/Difference/Ell_PH_multi_EllSdep_pH_Sdepfieldrain")
 summary(phell_mod_noint_sdep)
 plot(phell_mod_noint_sdep)
@@ -750,7 +1149,7 @@ phell_mod_noint_rain <- brm(bf(Ell ~ PH + fieldseason_rain + (1|SQUARE) + ar(tim
                               bf(PH ~ Sdep + fieldseason_rain + (1|SQUARE) + 
                                    ar(time = YRnm, gr = REP_ID), family = "student") +
                               set_rescor(FALSE),  save_all_pars = TRUE,
-                            data = mod_data, prior = mod_pr, cores = 6, iter = 5000,
+                            data = mod_data, prior = mod_pr, cores = 4, iter = 5000,
                             file = "Outputs/Models/Difference/Ell_PH_multi_Ellrain_pH_Sdepfieldrain")
 summary(phell_mod_noint_rain)
 plot(phell_mod_noint_rain)
@@ -775,49 +1174,404 @@ loo_compare(phell_mod_noint, phell_mod_noint_sdep, phell_mod_noint_rain)
 
 
 # Multivariate with N #### 
+# ** No measurement error ####
+# ~~~ 200m2 weighted ####
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = WH_R_W) %>%
+  select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
+         fieldseason_rain, Year1_pH, PH, 
+         N = NC_RATIO) %>%
+  mutate(Management = ifelse(Management == "High",1,0),
+         Sdep = as.numeric(scale(Sdep)), 
+         Ndep = as.numeric(scale(Ndep)), 
+         Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
+         N = as.numeric(scale(N)), 
+         fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
+  na.omit()
 
-# Cannot have mi notation or autoregressive component using brms notation in a
-# non-linear model
-get_prior(bf(Ell | mi(ELL_SE) ~ Inter + b1*mi(PH) + b2*step(Year1_pH - phthreshold)*N,
-             b1 + b2 + phthreshold ~ 1,Inter ~ (1|p|SQUARE),# + ar(time = YRnm, gr = REP_ID),
-             nl = TRUE, family = "student") +
-            bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+# Multivariate with N as a 2D spline
+# Habitat interaction
+get_prior(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
+               (1|SQUARE) +
+               ar(time = YRnm, gr = REP_ID),
+             family = "student") +
+            bf(PH  ~ Management*Sdep + fieldseason_rain + (1|SQUARE) +
                  ar(time = YRnm, gr = REP_ID), family = "student") + 
-            bf(N ~ Ndep + (1|p|SQUARE) +
+            bf(N ~ Ndep + (1|SQUARE) +
                  ar(time = YRnm, gr = REP_ID)) +
             set_rescor(FALSE), data = mod_data)
 
-mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "N"),
+
+mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
             prior(normal(0,0.5), class = "b", resp = "PH"),
-            prior(normal(0,0.25), class = "Intercept", resp = "N"),
+            prior(normal(0,0.5), class = "b", resp = "N"),
+            prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
+            prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
             prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-            prior(gamma(3,1), class = "nu", resp = "Ell"),
-            prior(gamma(3,1), class = "nu", resp = "PH"),
-            prior(normal(2,0.5), class = "ar", resp = "N"),
-            prior(normal(2,0.5), class = "ar", resp = "PH"),
-            prior(student_t(3,0,0.5), class = "sd", resp = "Ell", nlpar = "Inter"),
+            prior(student_t(3,0,1), class = "Intercept", resp = "N"),
+            prior(gamma(4,1), class = "nu", resp = "Ell"),
+            prior(gamma(4,1), class = "nu", resp = "PH"),
+            prior(normal(0,0.2), class = "ar", resp = "Ell"),
+            prior(normal(0,0.2), class = "ar", resp = "PH"),
+            prior(normal(0,0.2), class = "ar", resp = "N"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
             prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
+            prior(student_t(3,0,0.5), class = "sd", resp = "N"),
             prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
             prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
-            prior(lkj(2), class = "cor", group = "SQUARE"),
-            prior(normal(0,1), class = "meanme", resp = "Ell"),
-            prior(normal(0,1), class = "meanme", resp = "PH"),
-            prior(student_t(3,0,3), class = "sdme", resp = "Ell"),
-            prior(student_t(3,0,3), class = "sdme", resp = "PH"),
-            prior(normal(0,0.5),nlpar = "b1", resp= "Ell"),
-            prior(normal(0,0.5),nlpar = "b2", resp = "Ell"),
-            prior(normal(0,0.5),nlpar = "Inter", resp = "Ell"),
-            prior(normal(5.5,0.1),nlpar = "phthreshold", resp = "Ell"))
-make_stancode(bf(Ell | mi(ELL_SE) ~ Inter + b1*mi(PH) + b2*step(mi(PH) + Year1_pH - phthreshold)*N,
-                 b1 + b2 + phthreshold ~ 1,Inter ~ (1|p|SQUARE),# + ar(time = YRnm, gr = REP_ID),
-                 nl = TRUE, family = "student") +
-                bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
-                     ar(time = YRnm, gr = REP_ID), family = "student") + 
-                bf(N  ~ Ndep + (1|p|SQUARE) +
-                     ar(time = YRnm, gr = REP_ID), family = "student") +
-                set_rescor(FALSE), data = mod_data, prior = mod_pr)
-# doesn't work, would have to edit stan code myself 
+            prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
 
+
+# prior simulation
+prior_mod <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
+                      (1|SQUARE) +
+                      ar(time = YRnm, gr = REP_ID),
+                    family = "student") +
+                   bf(PH  ~ Management*Sdep + fieldseason_rain  + s(Year1_pH, N, Management) +
+                        (1|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID), family = "student") + 
+                   bf(N ~ Ndep + (1|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID))  +
+                   set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                 sample_prior = "only", save_pars = save_pars(all = TRUE, latent = TRUE), 
+                 cores = 4, iter = 5000)
+summary(prior_mod)
+pp_check(prior_mod, nsamples = 50, resp = "Ell")
+pp_check(prior_mod, nsamples = 50, resp = "PH")
+pp_check(prior_mod, nsamples = 50, resp = "N") 
+plot(conditional_effects(prior_mod))
+
+# run model - full weighted Ell R
+full_mod_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
+                         (1|SQUARE) +
+                         ar(time = YRnm, gr = REP_ID),
+                       family = "student") +
+                      bf(PH  ~ Management*Sdep + fieldseason_rain  + s(Year1_pH, N, Management) +
+                           (1|SQUARE) +
+                           ar(time = YRnm, gr = REP_ID), family = "student") + 
+                      bf(N ~ Ndep + (1|SQUARE) +
+                           ar(time = YRnm, gr = REP_ID)) +
+                      set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                    save_pars = save_pars(all = TRUE, latent = TRUE), 
+                    file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_spl_N_HAB",
+                    cores = 4, iter = 5000, control = list(adapt_delta = 0.95))
+summary(full_mod_whw)
+plot(full_mod_whw, ask = FALSE)
+pp_check(full_mod_whw, nsamples = 50, resp = "Ell")
+pp_check(full_mod_whw, nsamples = 50, resp = "PH")
+pp_check(full_mod_whw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(full_mod_whw))
+
+full_mod_whw <- add_criterion(full_mod_whw, "loo",  moment_match = TRUE, reloo = TRUE,
+                              file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_spl_N_HAB")
+
+# No pH ~ N spline
+mod_pr_red1 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+                 prior(normal(0,0.5), class = "b", resp = "PH"),
+                 prior(normal(0,0.5), class = "b", resp = "N"),
+                 prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
+                 prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+                 prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+                 prior(student_t(3,0,1), class = "Intercept", resp = "N"),
+                 prior(gamma(4,1), class = "nu", resp = "Ell"),
+                 prior(gamma(4,1), class = "nu", resp = "PH"),
+                 prior(normal(0,0.2), class = "ar", resp = "Ell"),
+                 prior(normal(0,0.2), class = "ar", resp = "PH"),
+                 prior(normal(0,0.2), class = "ar", resp = "N"),
+                 prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
+                 prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
+                 prior(student_t(3,0,0.5), class = "sd", resp = "N"),
+                 prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
+                 prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
+                 prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
+
+red_mod_1_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
+                          (1|SQUARE) +
+                          ar(time = YRnm, gr = REP_ID),
+                        family = "student") +
+                       bf(PH  ~ Management*Sdep + fieldseason_rain +
+                            (1|SQUARE) +
+                            ar(time = YRnm, gr = REP_ID), family = "student") + 
+                       bf(N ~ Ndep + (1|SQUARE) +
+                            ar(time = YRnm, gr = REP_ID)) +
+                       set_rescor(FALSE), data = mod_data, prior = mod_pr_red1,
+                     save_pars = save_pars(all = TRUE, latent = TRUE), 
+                     file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_N_HAB",
+                     cores = 4, iter = 5000, control = list(adapt_delta = 0.95))
+summary(red_mod_1_whw)
+plot(red_mod_1_whw, ask = FALSE)
+pp_check(red_mod_1_whw, nsamples = 50, resp = "Ell")
+pp_check(red_mod_1_whw, nsamples = 50, resp = "PH")
+pp_check(red_mod_1_whw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(red_mod_1_whw))
+
+red_mod_1_whw <- add_criterion(red_mod_1_whw, "loo",  moment_match = TRUE, reloo = TRUE,
+                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_N_HAB")
+
+# No Ell ~ N spline
+mod_pr_red2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+                 prior(normal(0,0.5), class = "b", resp = "PH"),
+                 prior(normal(0,0.5), class = "b", resp = "N"),
+                 prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+                 prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+                 prior(student_t(3,0,1), class = "Intercept", resp = "N"),
+                 prior(gamma(4,1), class = "nu", resp = "Ell"),
+                 prior(gamma(4,1), class = "nu", resp = "PH"),
+                 prior(normal(0,0.2), class = "ar", resp = "Ell"),
+                 prior(normal(0,0.2), class = "ar", resp = "PH"),
+                 prior(normal(0,0.2), class = "ar", resp = "N"),
+                 prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
+                 prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
+                 prior(student_t(3,0,0.5), class = "sd", resp = "N"),
+                 prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
+                 prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
+                 prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
+red_mod_2_whw <- brm(bf(Ell  ~ Management*PH + 
+                          (1|SQUARE) +
+                          ar(time = YRnm, gr = REP_ID),
+                        family = "student") +
+                       bf(PH  ~ Management*Sdep + fieldseason_rain +
+                            (1|SQUARE) +
+                            ar(time = YRnm, gr = REP_ID), family = "student") + 
+                       bf(N ~ Ndep + (1|SQUARE) +
+                            ar(time = YRnm, gr = REP_ID)) +
+                       set_rescor(FALSE), data = mod_data, prior = mod_pr_red2,
+                     save_pars = save_pars(all = TRUE, latent = TRUE), 
+                     file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_PH_N_HAB",
+                     cores = 4, iter = 5000, control = list(adapt_delta = 0.95))
+summary(red_mod_2_whw)
+plot(red_mod_2_whw, ask = FALSE)
+pp_check(red_mod_2_whw, nsamples = 50, resp = "Ell")
+pp_check(red_mod_2_whw, nsamples = 50, resp = "PH")
+pp_check(red_mod_2_whw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(red_mod_2_whw))
+
+red_mod_2_whw <- add_criterion(red_mod_2_whw, "loo",  moment_match = TRUE, reloo = TRUE, 
+                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_PH_N_HAB")
+
+loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw)
+
+# ~~~ 200m2 unweighted ####
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = WH_R_UW) %>%
+  select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
+         fieldseason_rain, Year1_pH, PH, 
+         N = NC_RATIO) %>%
+  mutate(Management = ifelse(Management == "High",1,0),
+         Sdep = as.numeric(scale(Sdep)), 
+         Ndep = as.numeric(scale(Ndep)), 
+         Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
+         N = as.numeric(scale(N)), 
+         fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
+  na.omit()
+
+# Multivariate with N as a 2D spline
+# Habitat interaction
+# run model - full weighted Ell R
+full_mod_whuw <- update(full_mod_whw, newdata = mod_data,
+                        control = list(adapt_delta = 0.95),
+                        cores = 4, iter = 5000,
+                        file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_spl_N_HAB")
+
+summary(full_mod_whuw)
+plot(full_mod_whuw, ask = FALSE)
+pp_check(full_mod_whuw, nsamples = 50, resp = "Ell")
+pp_check(full_mod_whuw, nsamples = 50, resp = "PH")
+pp_check(full_mod_whuw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(full_mod_whuw))
+
+full_mod_whuw <- add_criterion(full_mod_whuw, "loo",  moment_match = TRUE, reloo = TRUE,
+                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_spl_N_HAB")
+
+# No pH ~ N spline
+red_mod_1_whuw <- update(red_mod_1_whw, newdata = mod_data,
+                         cores = 4, iter = 5000,
+                         control = list(adapt_delta = 0.95),
+                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_N_HAB")
+
+summary(red_mod_1_whuw)
+plot(red_mod_1_whuw, ask = FALSE)
+pp_check(red_mod_1_whuw, nsamples = 50, resp = "Ell")
+pp_check(red_mod_1_whuw, nsamples = 50, resp = "PH")
+pp_check(red_mod_1_whuw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(red_mod_1_whuw))
+
+red_mod_1_whuw <- add_criterion(red_mod_1_whuw, "loo",  moment_match = TRUE, reloo = TRUE,
+                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_N_HAB")
+# No Ell ~ N spline
+red_mod_2_whuw <- update(red_mod_2_whw, newdata = mod_data,
+                         cores = 4, iter = 5000,
+                         control = list(adapt_delta = 0.95),
+                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_PH_N_HAB")
+
+summary(red_mod_2_whuw)
+plot(red_mod_2_whuw, ask = FALSE)
+pp_check(red_mod_2_whuw, nsamples = 50, resp = "Ell")
+pp_check(red_mod_2_whuw, nsamples = 50, resp = "PH")
+pp_check(red_mod_2_whuw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(red_mod_2_whuw))
+
+red_mod_2_whuw <- add_criterion(red_mod_2_whuw, "loo",  moment_match = TRUE, reloo = TRUE,
+                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_PH_N_HAB")
+
+loo_compare(full_mod_whuw, red_mod_1_whuw, red_mod_2_whuw)
+
+# ~~~ 4m2 weighted ####
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = SM_R_W) %>%
+  select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
+         fieldseason_rain, Year1_pH, PH, 
+         N = NC_RATIO) %>%
+  mutate(Management = ifelse(Management == "High",1,0),
+         Sdep = as.numeric(scale(Sdep)), 
+         Ndep = as.numeric(scale(Ndep)), 
+         Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
+         N = as.numeric(scale(N)), 
+         fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
+  na.omit()
+
+# Multivariate with N as a 2D spline
+# Habitat interaction
+# run model - full weighted Ell R
+full_mod_smw <- update(full_mod_whw, newdata = mod_data,
+                       cores = 4, iter = 5000,
+                       control = list(adapt_delta = 0.95),
+                       file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_spl_N_HAB")
+
+summary(full_mod_smw)
+plot(full_mod_smw, ask = FALSE)
+pp_check(full_mod_smw, nsamples = 50, resp = "Ell")
+pp_check(full_mod_smw, nsamples = 50, resp = "PH")
+pp_check(full_mod_smw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(full_mod_smw))
+
+full_mod_smw <- add_criterion(full_mod_smw, "loo",  moment_match = TRUE, reloo = TRUE,
+                              file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_spl_N_HAB")
+
+# No pH ~ N spline
+red_mod_1_smw <- update(red_mod_1_whw, newdata = mod_data,
+                        cores = 4, iter = 5000,
+                        control = list(adapt_delta = 0.95),
+                        file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_N_HAB")
+
+summary(red_mod_1_smw)
+plot(red_mod_1_smw, ask = FALSE)
+pp_check(red_mod_1_smw, nsamples = 50, resp = "Ell")
+pp_check(red_mod_1_smw, nsamples = 50, resp = "PH")
+pp_check(red_mod_1_smw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(red_mod_1_smw))
+
+red_mod_1_smw <- add_criterion(red_mod_1_smw, "loo",  moment_match = TRUE, reloo = TRUE,
+                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_N_HAB")
+# No Ell ~ N spline
+red_mod_2_smw <- update(red_mod_2_whw, newdata = mod_data,
+                        cores = 4, iter = 5000,
+                        control = list(adapt_delta = 0.95),
+                        file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_PH_N_HAB")
+
+summary(red_mod_2_smw)
+plot(red_mod_2_smw, ask = FALSE)
+pp_check(red_mod_2_smw, nsamples = 50, resp = "Ell")
+pp_check(red_mod_2_smw, nsamples = 50, resp = "PH")
+pp_check(red_mod_2_smw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(red_mod_2_smw))
+
+red_mod_2_smw <- add_criterion(red_mod_2_smw, "loo",  moment_match = TRUE, reloo = TRUE,
+                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_PH_N_HAB")
+
+loo_compare(full_mod_smw, red_mod_1_smw, red_mod_2_smw)
+
+# ~~~ 4m2 unweighted ####
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = SM_R_UW) %>%
+  select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
+         fieldseason_rain, Year2_pH, PH, 
+         N = NC_RATIO) %>%
+  mutate(Management = ifelse(Management == "High",1,0),
+         Sdep = as.numeric(scale(Sdep)), 
+         Ndep = as.numeric(scale(Ndep)), 
+         Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
+         N = as.numeric(scale(N)), 
+         fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
+  na.omit()
+
+# Multivariate with N as a 2D spline
+# Habitat interaction
+# run model - full weighted Ell R
+full_mod_smuw <- update(full_mod_whw, newdata = mod_data,
+                        cores = 4, iter = 5000,
+                        control = list(adapt_delta = 0.95),
+                        file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_spl_N_HAB")
+
+summary(full_mod_smuw)
+plot(full_mod_smuw, ask = FALSE)
+pp_check(full_mod_smuw, nsamples = 50, resp = "Ell")
+pp_check(full_mod_smuw, nsamples = 50, resp = "PH")
+pp_check(full_mod_smuw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(full_mod_smuw))
+
+full_mod_smuw <- add_criterion(full_mod_smuw, "loo",  moment_match = TRUE, reloo = TRUE,
+                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_spl_N_HAB")
+
+# No pH ~ N spline
+red_mod_1_smuw <- update(red_mod_1_whw, newdata = mod_data,
+                         cores = 4, iter = 5000,
+                         control = list(adapt_delta = 0.95),
+                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_N_HAB")
+
+summary(red_mod_1_smuw)
+plot(red_mod_1_smuw, ask = FALSE)
+pp_check(red_mod_1_smuw, nsamples = 50, resp = "Ell")
+pp_check(red_mod_1_smuw, nsamples = 50, resp = "PH")
+pp_check(red_mod_1_smuw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(red_mod_1_smuw))
+
+red_mod_1_smuw <- add_criterion(red_mod_1_smuw, "loo",  moment_match = TRUE, reloo = TRUE,
+                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_N_HAB")
+# No Ell ~ N spline
+red_mod_2_smuw <- update(red_mod_2_whw, newdata = mod_data,
+                         cores = 4, iter = 5000,
+                         control = list(adapt_delta = 0.95),
+                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_PH_N_HAB")
+
+summary(red_mod_2_smuw)
+plot(red_mod_2_smuw, ask = FALSE)
+pp_check(red_mod_2_smuw, nsamples = 50, resp = "Ell")
+pp_check(red_mod_2_smuw, nsamples = 50, resp = "PH")
+pp_check(red_mod_2_smuw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(red_mod_2_smuw))
+
+red_mod_2_smuw <- add_criterion(red_mod_2_smuw, "loo",  moment_match = TRUE, reloo = TRUE,
+                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_PH_N_HAB")
+
+loo_compare(full_mod_smuw, red_mod_1_smuw, red_mod_2_smuw)
+
+
+# ** Measurement error ####
 # Multivariate with N as a 2D spline
 # Cannot have mi notation within spline
 get_prior(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Year1_pH, N) + (1|p|SQUARE) +
@@ -868,7 +1622,7 @@ prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Year1_pH, N) + (1|p|SQUARE) +
                         ar(time = YRnm, gr = REP_ID)) +
                    set_rescor(FALSE), data = mod_data, prior = mod_pr,
                  sample_prior = "only", save_pars = save_pars(all = TRUE, latent = TRUE), 
-                 cores = 6, iter = 5000)
+                 cores = 4, iter = 5000)
 summary(prior_mod)
 pp_check(prior_mod, nsamples = 50, resp = "Ell")
 pp_check(prior_mod, nsamples = 50, resp = "PH")
@@ -885,7 +1639,7 @@ full_mod <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(N, Year1_pH) + (1|p|SQUARE) +
                        ar(time = YRnm, gr = REP_ID)) +
                   set_rescor(FALSE), data = mod_data2, prior = mod_pr,
                 save_pars = save_pars(all = TRUE, latent = TRUE), 
-                cores = 6, iter = 5000)
+                cores = 4, iter = 5000)
 summary(full_mod)
 pp_check(full_mod, nsamples = 50, resp = "Ell")
 pp_check(full_mod, nsamples = 50, resp = "PH")
@@ -900,14 +1654,14 @@ pairs(full_mod$fit, pars = grep("^b_|^sigma_|^nu_", mypars, value = TRUE))
 
 
 # Habitat interaction
-mod_data <- mutate(mod_data, Improved = ifelse(Habitat == "Improved",1,0))
-get_prior(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, N, Improved) + 
-               (1|p|SQUARE) +
+mod_data <- mutate(mod_data, Management = ifelse(Management == "High",1,0))
+get_prior(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year2_pH, N, Management) + 
+               (1|SQUARE) +
                ar(time = YRnm, gr = REP_ID),
              family = "student") +
-            bf(PH | mi(PH_DIW_SE)  ~ Sdep + fieldseason_rain + (1|p|SQUARE) +
+            bf(PH | mi(PH_DIW_SE)  ~ Management*Sdep + fieldseason_rain + (1|SQUARE) +
                  ar(time = YRnm, gr = REP_ID), family = "student") + 
-            bf(N ~ Ndep + C + (1|p|SQUARE) +
+            bf(N ~ Ndep + (1|SQUARE) +
                  ar(time = YRnm, gr = REP_ID)) +
             set_rescor(FALSE), data = mod_data)
 
@@ -933,35 +1687,35 @@ mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
 
 
 # prior simulation
-prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, N, Improved) + 
+prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year2_pH, N, Management) + 
                       (1|SQUARE) +
                       ar(time = YRnm, gr = REP_ID),
                     family = "student") +
-                   bf(PH | mi(PH_DIW_SE)  ~ Improved*Sdep + fieldseason_rain + (1|SQUARE) +
+                   bf(PH | mi(PH_DIW_SE)  ~ Management*Sdep + fieldseason_rain + (1|SQUARE) +
                         ar(time = YRnm, gr = REP_ID), family = "student") + 
-                   bf(N ~ Ndep + C + (1|SQUARE) +
-                        ar(time = YRnm, gr = REP_ID)) +
+                   bf(N ~ Ndep + (1|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID))  +
                    set_rescor(FALSE), data = mod_data, prior = mod_pr,
                  sample_prior = "only", save_pars = save_pars(all = TRUE, latent = TRUE), 
                  cores = 4, iter = 5000)
 summary(prior_mod)
 pp_check(prior_mod, nsamples = 50, resp = "Ell")
 pp_check(prior_mod, nsamples = 50, resp = "PH")
+pp_check(prior_mod, nsamples = 50, resp = "N") 
 plot(conditional_effects(prior_mod))
 
-# randomly pick 300 rows and run model to see what happens
-mod_data2 <- mod_data[sample.int(nrow(mod_data),300),]
-full_mod <- brm(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, N, Improved) + 
-                     (1|p|SQUARE) +
+# run model to see what happens
+full_mod <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year2_pH, N, Management) + 
+                     (1|SQUARE) +
                      ar(time = YRnm, gr = REP_ID),
                    family = "student") +
-                  bf(PH | mi(PH_DIW_SE)  ~ Improved*Sdep + fieldseason_rain + (1|p|SQUARE) +
+                  bf(PH | mi(PH_DIW_SE)  ~ Management*Sdep + fieldseason_rain + (1|SQUARE) +
                        ar(time = YRnm, gr = REP_ID), family = "student") + 
-                  bf(N ~ Ndep + C + (1|p|SQUARE) +
+                  bf(N ~ Ndep + (1|SQUARE) +
                        ar(time = YRnm, gr = REP_ID)) +
-                  set_rescor(FALSE), data = mod_data2, prior = mod_pr,
+                  set_rescor(FALSE), data = mod_data, prior = mod_pr,
                 save_pars = save_pars(all = TRUE, latent = TRUE), 
-                cores = 6, iter = 10000, control = list(adapt_delta = 0.99))
+                cores = 4, iter = 10000, control = list(adapt_delta = 0.99))
 summary(full_mod)
 pp_check(full_mod, nsamples = 50, resp = "Ell")
 pp_check(full_mod, nsamples = 50, resp = "PH")
@@ -969,6 +1723,16 @@ pp_check(full_mod, nsamples = 50, resp = "N")
 
 plot(conditional_effects(full_mod))
 
+ell_eutr_conditions <- data.frame(
+  cond__ = c("Management = 0 & Year2_pH = 4.44",
+             "Management = 0 & Year2_pH = 5.55",
+             "Management = 0 & Year2_pH = 6.66",
+             "Management = 1 & Year2_pH = 4.44",
+             "Management = 1 & Year2_pH = 5.55",
+             "Management = 1 & Year2_pH = 6.66")
+)
+plot(conditional_effects(full_mod, effects = "N",
+                         conditions = ell_eutr_conditions))
 
 # simulate data according to model and check if works 
 set.seed(151020)
@@ -987,11 +1751,11 @@ sim_data <- data.frame(SQUARE = gl(100,5)) %>%
   # mutate(test = 0.5*Improved+(1-Improved)*0.5*Sdep + 0.3*rain)
   mutate(pH_diffYear2 = rstudent_t(500, 4,
                                    0.5*Improved+(1-Improved)*0.5*Sdep + 
-                                           0.3*rain_year2,pHSE_year1))%>%
+                                     0.3*rain_year2,pHSE_year1))%>%
   mutate(Ell_diffYear2 = rstudent_t(500, 4,
-                                   pH_diffYear2*(1-Improved) + 
-                                           Improved*0.5*pH_diffYear2 + 
-                                           (pH>5.5)*-0.5*logN_year1,EllSE_year1)) %>%
+                                    pH_diffYear2*(1-Improved) + 
+                                      Improved*0.5*pH_diffYear2 + 
+                                      (pH>5.5)*-0.5*logN_year1,EllSE_year1)) %>%
   mutate(pH_year2 = pH + pH_diffYear2,
          pHSE_year2 = 0.15,
          Ell_year2 = Ell + Ell_diffYear2,
@@ -1001,11 +1765,11 @@ sim_data <- data.frame(SQUARE = gl(100,5)) %>%
          rain_year3 = rep(rnorm(100,0,1),each = 5)) %>%
   mutate(pH_diffYear3 = rstudent_t(500, 4,
                                    0.5*Improved+(1-Improved)*0.5*Sdep + 
-                                           0.3*rain_year3, pHSE_year2)) %>%
+                                     0.3*rain_year3, pHSE_year2)) %>%
   mutate(Ell_diffYear3 = rstudent_t(500, 4,
                                     pH_diffYear3*(1-Improved) + 
-                                            Improved*0.5*pH_diffYear3 + 
-                                            (pH_year2>5.5)*-0.5*logN_year2,EllSE_year2)) %>%
+                                      Improved*0.5*pH_diffYear3 + 
+                                      (pH_year2>5.5)*-0.5*logN_year2,EllSE_year2)) %>%
   select(SQUARE, REP_ID, Sdep, Ndep, Improved,
          rain_year12 = rain_year2,rain_year23 = rain_year3,
          C_year12 = logC_year1, C_year23 = logC_year2,
@@ -1024,19 +1788,32 @@ psych::pairs.panels(select_if(sim_data, is.numeric), rug = FALSE)
 
 
 sim_mod <- brm(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, N, Improved) + 
-                     (1|SQUARE) +
-                     ar(time = YRnm, gr = REP_ID),
-                   family = "student") +
-                  bf(PH | mi(PH_DIW_SE)  ~ Improved*Sdep + rain + (1|SQUARE) +
-                       ar(time = YRnm, gr = REP_ID), family = "student") + 
-                  bf(N ~ Ndep + C + (1|SQUARE) +
-                       ar(time = YRnm, gr = REP_ID)) +
-                  set_rescor(FALSE), data = sim_data, prior = mod_pr,
-                save_pars = save_pars(all = TRUE, latent = TRUE), 
-                cores = 4, iter = 4000)
+                    (1|SQUARE) +
+                    ar(time = YRnm, gr = REP_ID),
+                  family = "student") +
+                 bf(PH | mi(PH_DIW_SE)  ~ Improved*Sdep + rain + (1|SQUARE) +
+                      ar(time = YRnm, gr = REP_ID), family = "student") + 
+                 bf(N ~ Ndep + C + (1|SQUARE) +
+                      ar(time = YRnm, gr = REP_ID)) +
+                 set_rescor(FALSE), data = sim_data, prior = mod_pr,
+               save_pars = save_pars(all = TRUE, latent = TRUE), 
+               cores = 4, iter = 4000)
 summary(sim_mod)
 pp_check(sim_mod, nsamples = 50, resp = "Ell")
 pp_check(sim_mod, nsamples = 50, resp = "PH")
 pp_check(sim_mod, nsamples = 50, resp = "N")
 
 plot(conditional_effects(sim_mod))
+
+
+
+get_prior(bf(Ell | mi(ELL_SE) ~ Inter + b1*mi(PH) + b2*step(Year1_pH - phthreshold)*N,
+             b1 + b2 + phthreshold ~ 1,Inter ~ (1|p|SQUARE),# + ar(time = YRnm, gr = REP_ID),
+             nl = TRUE, family = "student") +
+            bf(PH | mi(PH_DIW_SE)  ~ Sdep + mi(Moisture) + (1|p|SQUARE) +
+                 ar(time = YRnm, gr = REP_ID), family = "student") + 
+            bf(Moisture | mi() ~ fieldseason_rain*LOI + (1|SQUARE) +
+                 ar(time = Yrnm, gr = REP_ID)) +
+            bf(N ~ Ndep + (1|p|SQUARE) +
+                 ar(time = YRnm, gr = REP_ID)) +
+            set_rescor(FALSE), data = mod_data)
