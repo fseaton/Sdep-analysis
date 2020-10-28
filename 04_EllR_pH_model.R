@@ -1266,7 +1266,7 @@ pp_check(full_mod_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_whw))
 
-full_mod_whw <- add_criterion(full_mod_whw, "loo",  moment_match = TRUE, reloo = TRUE,
+full_mod_whw <- add_criterion(full_mod_whw, "loo",  moment_match = TRUE, 
                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
@@ -1310,7 +1310,7 @@ pp_check(red_mod_1_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_whw))
 
-red_mod_1_whw <- add_criterion(red_mod_1_whw, "loo",  moment_match = TRUE, reloo = TRUE,
+red_mod_1_whw <- add_criterion(red_mod_1_whw, "loo",  moment_match = TRUE, 
                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_N_HAB")
 
 # No Ell ~ N spline
@@ -1352,10 +1352,14 @@ pp_check(red_mod_2_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whw))
 
-red_mod_2_whw <- add_criterion(red_mod_2_whw, "loo",  moment_match = TRUE, reloo = TRUE, 
+red_mod_2_whw <- add_criterion(red_mod_2_whw, "loo",  moment_match = TRUE,
                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_PH_N_HAB")
 
 loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw)
+# elpd_diff se_diff
+# full_mod_whw     0.0       0.0 
+# red_mod_2_whw -154.6      20.6 
+# red_mod_1_whw -157.0      20.3
 
 # ~~~ 200m2 unweighted ####
 mod_data <- ELL_pH %>%
@@ -1376,7 +1380,7 @@ mod_data <- ELL_pH %>%
 
 # Multivariate with N as a 2D spline
 # Habitat interaction
-# run model - full weighted Ell R
+# run model - full unweighted Ell R
 full_mod_whuw <- update(full_mod_whw, newdata = mod_data,
                         control = list(adapt_delta = 0.95),
                         cores = 4, iter = 5000,
@@ -1390,7 +1394,7 @@ pp_check(full_mod_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_whuw))
 
-full_mod_whuw <- add_criterion(full_mod_whuw, "loo",  moment_match = TRUE, reloo = TRUE,
+full_mod_whuw <- add_criterion(full_mod_whuw, "loo",  moment_match = TRUE, 
                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
@@ -1407,7 +1411,7 @@ pp_check(red_mod_1_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_whuw))
 
-red_mod_1_whuw <- add_criterion(red_mod_1_whuw, "loo",  moment_match = TRUE, reloo = TRUE,
+red_mod_1_whuw <- add_criterion(red_mod_1_whuw, "loo",  moment_match = TRUE, 
                                 file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_N_HAB")
 # No Ell ~ N spline
 red_mod_2_whuw <- update(red_mod_2_whw, newdata = mod_data,
@@ -1423,10 +1427,14 @@ pp_check(red_mod_2_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whuw))
 
-red_mod_2_whuw <- add_criterion(red_mod_2_whuw, "loo",  moment_match = TRUE, reloo = TRUE,
+red_mod_2_whuw <- add_criterion(red_mod_2_whuw, "loo",  moment_match = TRUE, 
                                 file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_PH_N_HAB")
 
 loo_compare(full_mod_whuw, red_mod_1_whuw, red_mod_2_whuw)
+# elpd_diff se_diff
+# full_mod_whuw     0.0       0.0 
+# red_mod_1_whuw -154.0      20.9 
+# red_mod_2_whuw -157.1      21.5 
 
 # ~~~ 4m2 weighted ####
 mod_data <- ELL_pH %>%
@@ -1447,7 +1455,7 @@ mod_data <- ELL_pH %>%
 
 # Multivariate with N as a 2D spline
 # Habitat interaction
-# run model - full weighted Ell R
+# run model - small weighted Ell R
 full_mod_smw <- update(full_mod_whw, newdata = mod_data,
                        cores = 4, iter = 5000,
                        control = list(adapt_delta = 0.95),
@@ -1461,7 +1469,7 @@ pp_check(full_mod_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_smw))
 
-full_mod_smw <- add_criterion(full_mod_smw, "loo",  moment_match = TRUE, reloo = TRUE,
+full_mod_smw <- add_criterion(full_mod_smw, "loo",  moment_match = TRUE, 
                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
@@ -1478,7 +1486,7 @@ pp_check(red_mod_1_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_smw))
 
-red_mod_1_smw <- add_criterion(red_mod_1_smw, "loo",  moment_match = TRUE, reloo = TRUE,
+red_mod_1_smw <- add_criterion(red_mod_1_smw, "loo",  moment_match = TRUE, 
                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_N_HAB")
 # No Ell ~ N spline
 red_mod_2_smw <- update(red_mod_2_whw, newdata = mod_data,
@@ -1494,10 +1502,14 @@ pp_check(red_mod_2_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smw))
 
-red_mod_2_smw <- add_criterion(red_mod_2_smw, "loo",  moment_match = TRUE, reloo = TRUE,
+red_mod_2_smw <- add_criterion(red_mod_2_smw, "loo",  moment_match = TRUE, 
                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_PH_N_HAB")
 
 loo_compare(full_mod_smw, red_mod_1_smw, red_mod_2_smw)
+# elpd_diff se_diff
+# full_mod_smw     0.0       0.0 
+# red_mod_2_smw -172.5      19.8 
+# red_mod_1_smw -177.9      19.4 
 
 # ~~~ 4m2 unweighted ####
 mod_data <- ELL_pH %>%
@@ -1518,7 +1530,7 @@ mod_data <- ELL_pH %>%
 
 # Multivariate with N as a 2D spline
 # Habitat interaction
-# run model - full weighted Ell R
+# run model - small unweighted Ell R
 full_mod_smuw <- update(full_mod_whw, newdata = mod_data,
                         cores = 4, iter = 5000,
                         control = list(adapt_delta = 0.95),
@@ -1532,7 +1544,7 @@ pp_check(full_mod_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_smuw))
 
-full_mod_smuw <- add_criterion(full_mod_smuw, "loo",  moment_match = TRUE, reloo = TRUE,
+full_mod_smuw <- add_criterion(full_mod_smuw, "loo",  moment_match = TRUE, 
                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
@@ -1549,7 +1561,7 @@ pp_check(red_mod_1_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_smuw))
 
-red_mod_1_smuw <- add_criterion(red_mod_1_smuw, "loo",  moment_match = TRUE, reloo = TRUE,
+red_mod_1_smuw <- add_criterion(red_mod_1_smuw, "loo",  moment_match = TRUE, 
                                 file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_N_HAB")
 # No Ell ~ N spline
 red_mod_2_smuw <- update(red_mod_2_whw, newdata = mod_data,
@@ -1565,10 +1577,95 @@ pp_check(red_mod_2_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smuw))
 
-red_mod_2_smuw <- add_criterion(red_mod_2_smuw, "loo",  moment_match = TRUE, reloo = TRUE,
+red_mod_2_smuw <- add_criterion(red_mod_2_smuw, "loo",  moment_match = TRUE, 
                                 file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_PH_N_HAB")
 
 loo_compare(full_mod_smuw, red_mod_1_smuw, red_mod_2_smuw)
+# elpd_diff se_diff
+# full_mod_smuw     0.0       0.0 
+# red_mod_2_smuw -168.8      20.0 
+# red_mod_1_smuw -174.8      19.4
+
+# Summary plots ####
+# Plot for comparing pH effects on different Ellenberg R scores
+nd <- 
+  tibble(N = seq(from = -2.25, to = 3.25, length.out = 30) %>% 
+           rep(., times = 6),
+         Year1_pH = rep(c(-1,0,1), each = 30) %>% 
+           rep(., times = 2),
+         Management = rep(0:1, each = 90),
+         Sdep = 0,
+         fieldseason_rain = 0,
+         YRnm = 1,
+         REP_ID = 1:180)
+
+f <- do.call(rbind, list(
+  fitted(full_mod_whw, newdata = nd, re_formula = NA, resp = PH) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Weighted full"),
+  fitted(full_mod_whuw, newdata = nd, re_formula = NA, resp = PH) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Unweighted full"),
+  fitted(full_mod_smw, newdata = nd, re_formula = NA, resp = PH) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Weighted small"),
+  fitted(full_mod_smuw, newdata = nd, re_formula = NA, resp = PH) %>%
+    as_tibble() %>%
+    bind_cols(nd) %>%
+    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+           Response = "Unweighted small")
+))
+
+plot_dat <- ELL_pH %>% 
+  select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
+         PH,Management, REP_ID, Time_period,
+         Year1_pH, N) %>%
+  filter(!is.na(Management)) %>%
+  pivot_longer(contains("_R_"), names_to = "Response") %>%
+  mutate(Response = recode(Response,
+                           "WH_R_W" = "Weighted full",
+                           "WH_R_UW" = "Unweighted full",
+                           "SM_R_W" = "Weighted small",
+                           "SM_R_UW" = "Unweighted small"),
+         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
+
+ggplot(plot_dat) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_smooth(data = f,
+              aes(x = N,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/4, size = 1/2) +
+  facet_wrap(~Response + Management) +
+  labs(x = "pH", y = "Ellenberg R") +
+  scale_x_continuous(expand = c(0,0))
+ggsave("N effect on pH.png",
+       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+       width = 16, height = 12, units = "cm")
+
+ggplot(plot_dat) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_point(aes(x = N, y = PH, colour = Management),
+             alpha = 0.2) +
+  geom_smooth(data = f,
+              aes(x = N,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/4, size = 1/2) +
+  facet_wrap(~Response) +
+  labs(x = "pH", y = "Ellenberg R") +
+  scale_x_continuous(expand = c(0,0))
+ggsave("pH effect on Ellenberg R score versions with data.png",
+       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+       width = 16, height = 12, units = "cm")
 
 
 # ** Measurement error ####
