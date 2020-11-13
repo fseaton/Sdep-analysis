@@ -4,13 +4,8 @@ library(readxl)
 library(dplyr)
 
 # atmospheric deposition data
-Sdep_avg <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_gridavg_1970-2018_5km_kgS_ha.csv")
-Sdep_for <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_forest_1970-2018_5km_kgS_ha.csv")
-Sdep_moo <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Sdep_moor_1970-2018_5km_kgS_ha.csv")
-
-Ndep_avg <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_gridavg_1970-2018_5km_kgN_ha.csv")
-Ndep_for <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_forest_1970-2018_5km_kgN_ha.csv")
-Ndep_moo <- fread("N:/UKScape/CBED_1970-2018_SN_dep/totalCBED_Ndep_moor_1970-2018_5km_kgN_ha.csv")
+Sdep_year <- fread("~/NS_Dep_CS_Data/CS_tot_S_dep_1970_2017_kgS_ha.csv")
+Ndep_year <- fread("~/NS_Dep_CS_Data/CS_tot_N_dep_1970_2017_kgN_ha.csv")
 
 ## get data on species characteristics from CS database
 pwds <- read.csv("Outputs/pwd.csv")
