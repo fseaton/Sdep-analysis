@@ -2600,43 +2600,32 @@ pp_check(sim_mod, nsamples = 50, resp = "N")
 
 plot(conditional_effects(sim_mod))
 
+# Normal
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = WH_R_W) %>%
+  select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
+         fieldseason_rain, Year1_pH, PH, 
+         N = NC_RATIO, ELL_SE = ELL_WH_W_SE_NORM, 
+         PH_SE = PH_DIW_SE_NORM) %>%
+  mutate(Management = ifelse(Management == "High",1,0),
+         Sdep = as.numeric(scale(Sdep)), 
+         Ndep = as.numeric(scale(Ndep)), 
+         Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
+         N = as.numeric(scale(N)), 
+         fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
+  na.omit()
 
-# ~~~ 200m2 weighted ####
-# run model - full weighted Ell R
-full_mod_whw <- brm(bf(Ell | mi(ELL_SE)  ~ Management*mi(PH) + s(Year1_pH, N, Management) + 
-                         (1|SQUARE) +
-                         ar(time = YRnm, gr = REP_ID),
-                       family = "student") +
-                      bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain  + s(Year1_pH, N, Management) +
-                           (1|SQUARE) +
-                           ar(time = YRnm, gr = REP_ID), family = "student") + 
-                      bf(N ~ Ndep + (1|SQUARE) +
-                           ar(time = YRnm, gr = REP_ID)) +
-                      set_rescor(FALSE), data = mod_data, prior = mod_pr,
-                    save_pars = save_pars(all = TRUE, latent = TRUE), 
-                    file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_N_HAB",
-                    cores = 4, iter = 5000, control = list(adapt_delta = 0.95))
-summary(full_mod_whw)
-plot(full_mod_whw, ask = FALSE)
-pp_check(full_mod_whw, nsamples = 50, resp = "Ell")
-pp_check(full_mod_whw, nsamples = 50, resp = "PH")
-pp_check(full_mod_whw, nsamples = 50, resp = "N")
-
-# plot(conditional_effects(full_mod_whw))
-
-full_mod_whw <- add_criterion(full_mod_whw, "loo",  moment_match = TRUE, 
-                              file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_N_HAB")
-
-# No pH ~ N spline
-mod_pr_red1 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+mod_pr_norm <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(normal(0,0.5), class = "b", resp = "PH"),
                  prior(normal(0,0.5), class = "b", resp = "N"),
                  prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
+                 prior(student_t(3, 0, 2.5), class = "sds", resp = "PH"),
                  prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "PH"),
                  prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-                 prior(gamma(4,1), class = "nu", resp = "Ell"),
-                 prior(gamma(4,1), class = "nu", resp = "PH"),
                  prior(normal(0,0.2), class = "ar", resp = "Ell"),
                  prior(normal(0,0.2), class = "ar", resp = "PH"),
                  prior(normal(0,0.2), class = "ar", resp = "N"),
@@ -2647,13 +2636,77 @@ mod_pr_red1 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
 
-red_mod_1_whw <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, N, Management) + 
+full_mod_whw_norm <- brm(bf(Ell | mi(ELL_SE)  ~ Management*mi(PH) + s(Year1_pH, N, Management) + 
+                         (1|SQUARE) +
+                         ar(time = YRnm, gr = REP_ID)) +
+                      bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain  + s(Year1_pH, N, Management) +
+                           (1|SQUARE) +
+                           ar(time = YRnm, gr = REP_ID)) + 
+                      bf(N ~ Ndep + (1|SQUARE) +
+                           ar(time = YRnm, gr = REP_ID)) +
+                      set_rescor(FALSE), data = mod_data, prior = mod_pr_norm,
+                    save_pars = save_pars(all = TRUE, latent = TRUE), 
+                    cores = 4, iter = 2000)
+summary(full_mod_whw_norm)
+plot(full_mod_whw_norm, ask = FALSE)
+pp_check(full_mod_whw_norm, nsamples = 50, resp = "Ell")
+pp_check(full_mod_whw_norm, nsamples = 50, resp = "PH")
+pp_check(full_mod_whw_norm, nsamples = 50, resp = "N")
+
+mod_pr <- mod_pr_norm
+
+
+# ~~~ 200m2 weighted ####
+# run model - full weighted Ell R
+full_mod_whw <- brm(bf(Ell | mi(ELL_SE)  ~ Management*mi(PH) + s(Year1_pH, N) + 
+                         (1|SQUARE) +
+                         ar(time = YRnm, gr = REP_ID)) +
+                      bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain  + 
+                           s(Year1_pH, N) +
+                           (1|SQUARE) +
+                           ar(time = YRnm, gr = REP_ID)) + 
+                      bf(N ~ Ndep + (1|SQUARE) +
+                           ar(time = YRnm, gr = REP_ID)) +
+                      set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                    save_pars = save_pars(all = TRUE, latent = TRUE), 
+                    file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_N_HAB",
+                    cores = 4, iter = 4000, control = list(adapt_delta = 0.95))
+summary(full_mod_whw)
+plot(full_mod_whw, ask = FALSE)
+pp_check(full_mod_whw, nsamples = 50, resp = "Ell")
+pp_check(full_mod_whw, nsamples = 50, resp = "PH")
+pp_check(full_mod_whw, nsamples = 50, resp = "N")
+
+# plot(conditional_effects(full_mod_whw))
+
+full_mod_whw <- add_criterion(full_mod_whw, "loo",  moment_match = TRUE,
+                              file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_N_HAB")
+
+
+# No pH ~ N spline
+mod_pr_red1 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+                 prior(normal(0,0.5), class = "b", resp = "PH"),
+                 prior(normal(0,0.5), class = "b", resp = "N"),
+                 prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
+                 prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+                 prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+                 prior(student_t(3,0,1), class = "Intercept", resp = "N"),
+                 prior(normal(0,0.2), class = "ar", resp = "Ell"),
+                 prior(normal(0,0.2), class = "ar", resp = "PH"),
+                 prior(normal(0,0.2), class = "ar", resp = "N"),
+                 prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
+                 prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
+                 prior(student_t(3,0,0.5), class = "sd", resp = "N"),
+                 prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
+                 prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
+                 prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
+
+red_mod_1_whw <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, N) + 
                           (1|SQUARE) +
-                          ar(time = YRnm, gr = REP_ID),
-                        family = "student") +
+                          ar(time = YRnm, gr = REP_ID)) +
                        bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain +
                             (1|SQUARE) +
-                            ar(time = YRnm, gr = REP_ID), family = "student") + 
+                            ar(time = YRnm, gr = REP_ID)) + 
                        bf(N ~ Ndep + (1|SQUARE) +
                             ar(time = YRnm, gr = REP_ID)) +
                        set_rescor(FALSE), data = mod_data, prior = mod_pr_red1,
@@ -2668,7 +2721,7 @@ pp_check(red_mod_1_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_whw))
 
-red_mod_1_whw <- add_criterion(red_mod_1_whw, "loo",  moment_match = TRUE, 
+red_mod_1_whw <- add_criterion(red_mod_1_whw, "loo",  moment_match = TRUE,
                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_N_HAB")
 
 # No Ell ~ N spline
@@ -2678,8 +2731,6 @@ mod_pr_red2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "PH"),
                  prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-                 prior(gamma(4,1), class = "nu", resp = "Ell"),
-                 prior(gamma(4,1), class = "nu", resp = "PH"),
                  prior(normal(0,0.2), class = "ar", resp = "Ell"),
                  prior(normal(0,0.2), class = "ar", resp = "PH"),
                  prior(normal(0,0.2), class = "ar", resp = "N"),
@@ -2691,11 +2742,10 @@ mod_pr_red2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
 red_mod_2_whw <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + 
                           (1|SQUARE) +
-                          ar(time = YRnm, gr = REP_ID),
-                        family = "student") +
+                          ar(time = YRnm, gr = REP_ID)) +
                        bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain +
                             (1|SQUARE) +
-                            ar(time = YRnm, gr = REP_ID), family = "student") + 
+                            ar(time = YRnm, gr = REP_ID)) + 
                        bf(N ~ Ndep + (1|SQUARE) +
                             ar(time = YRnm, gr = REP_ID)) +
                        set_rescor(FALSE), data = mod_data, prior = mod_pr_red2,

@@ -302,95 +302,126 @@ ELL_SE <- data.frame(
 
 
 # check normal distribution
-X_Ell_whole_QA %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
-  group_by(Year) %>%
+X_Ell_QA %>% 
+  group_by(Year, PlotSize, Weighting) %>%
   na.omit() %>%
-  summarise(mu = MASS::fitdistr(WH_UW_diff,"normal")$estimate[1],
-            sd = MASS::fitdistr(WH_UW_diff,"normal")$estimate[2])
-# Year       mu    sd
-# <dbl>    <dbl> <dbl>
-# 1  1990 -0.00476 0.203
-# 2  1998  0.0936  0.198
-# 3  2007  0.0248  0.236
-# 4  2019  0.0115  0.185
+  summarise(mu = MASS::fitdistr(Diff,"normal")$estimate[1],
+            sd = MASS::fitdistr(Diff,"normal")$estimate[2])
+# Year PlotSize Weighting       mu    sd
+# <dbl> <chr>    <chr>        <dbl> <dbl>
+#   1  1990 SM       UW        -0.00340 0.240
+# 2  1990 SM       W         -0.0764  0.396
+# 3  1990 WH       UW         0.00126 0.204
+# 4  1990 WH       W          0.0738  0.298
+# 5  1998 SM       UW        -0.0572  0.229
+# 6  1998 SM       W         -0.0590  0.312
+# 7  1998 WH       UW        -0.0907  0.198
+# 8  1998 WH       W         -0.0718  0.239
+# 9  2007 SM       UW        -0.0384  0.308
+# 10  2007 SM       W         -0.0371  0.468
+# 11  2007 WH       UW        -0.0251  0.236
+# 12  2007 WH       W         -0.0173  0.319
+# 13  2019 SM       UW         0.0521  0.320
+# 14  2019 SM       W          0.00249 0.480
+# 15  2019 WH       UW        -0.00341 0.181
+# 16  2019 WH       W          0.00114 0.419
 
-ELL_QA_WH_NORM <- X_Ell_whole_QA %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>% 
-  rbind(mutate(X_Ell_whole_QA, Year = 1978)) %>%
-  group_by(Year) %>%
-  na.omit() %>%
-  summarise(sd = MASS::fitdistr(WH_UW_diff,"normal")$estimate[2])
+# 1978 (using 1990 data) to 1998
+Ell_SMUW_9098 <-rnorm(100000,-0.0572,0.229) -
+  rnorm(100000,-0.0034,0.24)
+MASS::fitdistr(Ell_SMUW_9098, "normal")
+# mean             sd      
+# -0.0537842888    0.3331606802 
+# ( 0.0010535466) ( 0.0007449699)
 
+Ell_SMW_9098 <- rnorm(100000,-0.059,0.312) -
+  rnorm(100000,-0.0764,0.396)
+MASS::fitdistr(Ell_SMW_9098, "normal")
+# mean           sd     
+# 0.016344235   0.502821416 
+# (0.001590061) (0.001124343)
 
-# Check by habitat
-X_Ell_whole_QA_BH <- do.call(rbind, list(
-  X_Ell_whole_QA %>% filter(Year == 1990 & !is.na(WH_UW_diff)) %>%
-    select(REP_ID, Year, WH_UW_diff) %>%
-    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y90)),
-  X_Ell_whole_QA %>% filter(Year == 1998 & !is.na(WH_UW_diff)) %>%
-    select(REP_ID, Year, WH_UW_diff) %>%
-    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y9899)),
-  X_Ell_whole_QA %>% filter(Year == 2007 & !is.na(WH_UW_diff)) %>%
-    select(REP_ID, Year, WH_UW_diff) %>%
-    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y07)),
-  X_Ell_whole_QA %>% filter(Year %in% c(2016,2019) & !is.na(WH_UW_diff)) %>%
-    select(REP_ID, Year, WH_UW_diff) %>%
-    left_join(select(CS_REP_ID, REPEAT_PLOT_ID, REP_ID = Y19))
-)) %>%
-  select(-REP_ID) %>%
-  left_join(BH_comb, by = c("REPEAT_PLOT_ID" = "REP_ID","Year")) %>%
-  mutate(Habitat = ifelse(BH %in% c(1,2), 
-                          "Woodland",
-                          ifelse(BH %in% c(4,5,6),
-                                 "Improved", 
-                                 ifelse(BH %in% c(7,8,9,10,11,12,15,16), 
-                                        "Habitat","Other"))))
+Ell_WHUW_9098 <- rnorm(100000,-0.0907,0.198) -
+  rnorm(100000,0.00126,0.204)
+MASS::fitdistr(Ell_WHUW_9098, "normal")
+# mean             sd      
+# -0.0933815215    0.2837339246 
+# ( 0.0008972455) ( 0.0006344483)
 
+Ell_WHW_9098 <- rnorm(100000,-0.0718,0.239) -
+  rnorm(100000,0.0738,0.298)
+MASS::fitdistr(Ell_WHW_9098, "normal")
+# mean             sd      
+# -0.1452812734    0.3823796764 
+# ( 0.0012091907) ( 0.0008550269)
 
+# 1998 to 2007
+Ell_SMUW_9807 <- rnorm(100000,-0.0384,0.308) - 
+  rnorm(100000,-0.0572,0.229)
+MASS::fitdistr(Ell_SMUW_9807, "normal")
+# mean            sd     
+# 0.0188350164   0.3848821075 
+# (0.0012171041) (0.0008606226)
 
-ggplot(X_Ell_whole_QA_BH, aes(x = BH_DESC, y = WH_UW_diff)) +
-  geom_jitter(height = 0, colour = "grey") +
-  geom_boxplot(fill= NA, outlier.shape = NA)
-ggplot(X_Ell_whole_QA_BH, aes(x = Habitat, y = WH_UW_diff)) +
-  geom_jitter(height = 0, colour = "grey") +
-  geom_boxplot(fill= NA, outlier.shape = NA)
+Ell_SMW_9807 <- rnorm(100000,-0.0371,0.468) - 
+  rnorm(100000,-0.0590,0.312)
+MASS::fitdistr(Ell_SMW_9807, "normal")
+# mean           sd     
+# 0.022972157   0.562380581 
+# (0.001778404) (0.001257521)
 
+Ell_WHUW_9807 <- rnorm(100000,-0.0251,0.236) - 
+  rnorm(100000,-0.0907,0.198)
+MASS::fitdistr(Ell_WHUW_9807, "normal")
+# mean            sd     
+# 0.0660062989   0.3077434036 
+# (0.0009731701) (0.0006881352)
 
-X_Ell_whole_QA_BH %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
-  group_by(Year, Habitat) %>%
-  na.omit() %>%
-  summarise(mu = MASS::fitdistr(WH_UW_diff,"normal")$estimate[1],
-            sd = MASS::fitdistr(WH_UW_diff,"normal")$estimate[2])
-# Year Habitat        mu      sd
-# <dbl> <chr>       <dbl>   <dbl>
-#   1  1990 Habitat   0.0264   0.0997
-# 2  1990 Improved -0.0173   0.247 
-# 3  1990 Other     0.0303  NA     
-# 4  1990 Woodland  0.00257  0.0442
-# 5  1998 Habitat   0.172    0.128 
-# 6  1998 Improved  0.0379   0.217 
-# 7  1998 Other     0.317   NA     
-# 8  1998 Woodland  0.195    0.0358
-# 9  2007 Habitat  -0.0148   0.177 
-# 10  2007 Improved  0.0179   0.190 
-# 11  2007 Other     0.0891  NA     
-# 12  2007 Woodland  0.338    0.519 
-# 13  2019 Habitat   0.118    0.155 
-# 14  2019 Improved -0.0143   0.190 
-# 15  2019 Woodland  0.0444  NA     
-X_Ell_whole_QA_BH %>% 
-  mutate(Year = ifelse(Year == 2016, 2019, Year)) %>%
-  filter(Habitat != "Woodland") %>%
-  filter(Year != 1990) %>%
-  group_by(Year, Habitat) %>%
-  na.omit() %>%
-  summarise(mu = MASS::fitdistr(WH_UW_diff,"t", start = list(m = 0, s = 0.5, df = 3))$estimate[1],
-            sd = MASS::fitdistr(WH_UW_diff,"t", start = list(m = 0, s = 0.5, df = 3))$estimate[2],
-            df = MASS::fitdistr(WH_UW_diff,"t", start = list(m = 0, s = 0.5, df = 3))$estimate[3])
+Ell_WHW_9807 <- rnorm(100000,-0.0173,0.319) - 
+  rnorm(100000,-0.0718,0.239)
+MASS::fitdistr(Ell_WHW_9807, "normal")
+# mean            sd     
+# 0.0545133358   0.3973044908 
+# (0.0012563871) (0.0008883998)
 
 
+# 2007 to 2019
+Ell_SMUW_0719 <- rnorm(100000,0.0521,0.320) - 
+  rnorm(100000,-0.0384,0.308) 
+MASS::fitdistr(Ell_SMUW_0719, "normal")
+# mean            sd     
+# 0.0901869514   0.4431574876 
+# (0.0014013870) (0.0009909303)
+
+Ell_SMW_0719 <- rnorm(100000,0.00249,0.480) - 
+  rnorm(100000,-0.0371,0.468)
+MASS::fitdistr(Ell_SMW_0719, "normal")
+# mean           sd     
+# 0.040685935   0.672016834 
+# (0.002125104) (0.001502675)
+
+Ell_WHUW_0719 <- rnorm(100000,-0.00341,0.181)  - 
+  rnorm(100000,-0.0251,0.236) 
+MASS::fitdistr(Ell_WHUW_0719, "normal")
+# mean            sd     
+# 0.0222938300   0.2972070206 
+# (0.0009398511) (0.0006645751)
+
+Ell_WHW_0719 <- rnorm(100000,0.00114,0.419) -
+  rnorm(100000,-0.0173,0.319)
+MASS::fitdistr(Ell_WHW_0719, "normal")
+# mean           sd     
+# 0.018484580   0.525938009 
+# (0.001663162) (0.001176033)
+
+# Summary stats for s
+ELL_SE <- data.frame(
+  Time_period = c("7898","9807","0719"),
+  ELL_WH_W_SE_NORM = c(0.382,0.397,0.526),
+  ELL_WH_UW_SE_NORM = c(0.284,0.308,0.297),
+  ELL_SM_W_SE_NORM = c(0.503,0.562,0.672),
+  ELL_SM_UW_SE_NORM = c(0.333,0.385,0.443)
+)
 
 
 # pH QA data ####
@@ -410,6 +441,11 @@ MASS::fitdistr(ph78_diff, "t")
 # -0.29246641    0.35713021    4.65432249 
 # ( 0.03176037) ( 0.03581546) ( 1.81106541)
 hist(ph78_diff)
+
+MASS::fitdistr(ph78_diff, "normal")
+# mean           sd     
+# -0.27727011    0.46097491 
+# ( 0.03494642) ( 0.02471085)
 
 # compare visually fits of normal and student T distribution
 h <- hist(ph78_diff, breaks = 40)
@@ -498,6 +534,10 @@ MASS::fitdistr(ph_diff, "t")
 # 0.22816783   0.30264485   3.72142853 
 # (0.02716051) (0.02722469) (1.02880468)
 
+MASS::fitdistr(ph_diff, "normal")
+# mean          sd    
+# 0.22443820   0.44618479 
+# (0.03344296) (0.02364775)
 
 # compare visually fits of normal and student T distribution
 h <- hist(ph_diff, breaks = 40)
@@ -557,6 +597,10 @@ MASS::fitdistr(ph07_diff, "t")
 # m            s            df    
 # 0.01133412   0.14252233   2.45484216 
 # (0.01712093) (0.01895973) (0.70482518)
+MASS::fitdistr(ph07_diff, "normal")
+# mean            sd     
+# -0.001478261    0.251676962 
+# ( 0.023468998) ( 0.016595087)
 
 # compare visually fits of normal and student T distribution
 h <- hist(ph07_diff, breaks = 40)
@@ -574,6 +618,10 @@ MASS::fitdistr(ph07_diff, "t")
 # m            s            df    
 # 0.02140830   0.09420440   1.66293369 
 # (0.01135743) (0.01451080) (0.39417898)
+MASS::fitdistr(ph07_diff, "normal")
+# mean          sd    
+# 0.02156522   0.22636865 
+# (0.02110899) (0.01492631)
 
 # 2019
 summary(UK19_PH_QA)
@@ -607,6 +655,10 @@ MASS::fitdistr(ph19_diff, "t")
 # m             s            df     
 # -0.02019703    0.08408127    2.83794645 
 # ( 0.01140272) ( 0.01150246) ( 0.94386890)
+MASS::fitdistr(ph19_diff, "normal")
+# mean           sd     
+# -0.02904762    0.16495035 
+# ( 0.01799756) ( 0.01272620)
 
 # compare visually fits of normal and student T distribution
 h <- hist(ph19_diff, breaks = 40)
@@ -624,6 +676,10 @@ MASS::fitdistr(ph19_diff, "t")
 # m              s              df     
 # -0.000130451    0.053572120    2.458920628 
 # ( 0.007404153) ( 0.007561589) ( 0.748074972)
+MASS::fitdistr(ph19_diff, "normal")
+# mean            sd     
+# -0.015000000    0.118818589 
+# ( 0.012964171) ( 0.009167053)
 
 # compare visually fits of normal and student T distribution
 h <- hist(ph19_diff, breaks = 40)
@@ -650,3 +706,16 @@ MASS::fitdistr(phdiff0719, "t")
 # -0.0941307056    0.0651198536    2.3597493212 
 # ( 0.0002605570) ( 0.0002760143) ( 0.0208361922)
 
+phdiff0719 <- rnorm(100000,-0.02904762,0.16495035) -
+  rnorm(100000,-0.001478261,0.251676962)
+MASS::fitdistr(phdiff0719, "normal")
+# mean             sd      
+# -0.0273476998    0.3027112396 
+# ( 0.0009572570) ( 0.0006768829)
+
+phdiff0719 <- rnorm(100000,-0.015,0.118818589) -
+  rnorm(100000,0.02156522,0.22636865)
+MASS::fitdistr(phdiff0719, "normal")
+# mean             sd      
+# -0.0374323454    0.2565189188 
+# ( 0.0008111840) ( 0.0005735937)

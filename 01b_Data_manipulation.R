@@ -335,7 +335,11 @@ ELL_QA_diff <- data.frame(
   ELL_WH_W_SE = c(0.290,0.300,0.361),
   ELL_WH_UW_SE = c(0.228,0.259,0.222),
   ELL_SM_W_SE = c(0.402,0.380,0.517),
-  ELL_SM_UW_SE = c(0.336,0.346,0.396)
+  ELL_SM_UW_SE = c(0.336,0.346,0.396),
+  ELL_WH_W_SE_NORM = c(0.382,0.397,0.526),
+  ELL_WH_UW_SE_NORM = c(0.284,0.308,0.297),
+  ELL_SM_W_SE_NORM = c(0.503,0.562,0.672),
+  ELL_SM_UW_SE_NORM = c(0.333,0.385,0.443)
 )
 
 
@@ -416,7 +420,9 @@ PH_Diff_wide <- select(PH, REP_ID, diff0719) %>%
 PH_QA_diff <- data.frame(
   Time_period = c("7898","9807","0719"),
   PH_DIW_SE = c(0.357,0.303,0.187),
-  PH_CACL2_SE = c(NA,NA,0.065)
+  PH_CACL2_SE = c(NA,NA,0.065),
+  PH_DIW_SE_NORM = c(0.461,0.446,0.303),
+  PH_CACL2_SE_NORM = c(NA,NA,0.257)
 )
 
 
