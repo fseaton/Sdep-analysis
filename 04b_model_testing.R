@@ -11,10 +11,10 @@ sim_func <- function(nsquare = 50, nplotpersquare = 5){
            Improved = rbinom(nplot,1,0.007*as.numeric(SQUARE))) %>%
     mutate(pH = rnorm(nplot,mean = 4.5 + Improved + rep(rnorm(nplot/nplotpersquare,0,0.5),each = nplotpersquare), 1)) %>%
     mutate(Ell = rnorm(nplot, mean = pH + rep(rnorm(nplot/nplotpersquare,0,1),each = nplotpersquare), 1)) %>%
-    mutate(C_year12 = rnorm(nplot, rep(rnorm(nplot/nplotpersquare,0,0.2),each = nplotpersquare), 1)) %>%
-    mutate(N_year12 = rnorm(nplot, C_year12, 0.1)) %>%
     mutate(Sdep_year12 = rep(rnorm(nplot/nplotpersquare,0,1),each = nplotpersquare)) %>%
     mutate(Ndep_year12 = rep(rnorm(nplot/nplotpersquare,-Sdep_year12,1),each = nplotpersquare)) %>%
+    mutate(N_year12 = rnorm(nplot, 
+                            0.5*Ndep_year12 + rep(rnorm(nplot/nplotpersquare,0,0.2),each = nplotpersquare), 0.5)) %>%
     mutate(rain_year12 = rep(rnorm(nplot/nplotpersquare,0,1),each = nplotpersquare),
            PH_SE_year12 = 0.2,
            ELL_SE_year12 = 0.15 + Improved*0.05,
@@ -31,12 +31,11 @@ sim_func <- function(nsquare = 50, nplotpersquare = 5){
                                          (pH>5.5)*-0.5*N_year12,ELL_SE_year12)) %>%
     mutate(pH_year2 = pH + pH_diffYear12,
            Ell_year2 = Ell + Ell_diffYear12,
-           C_year23 = C_year12 + rnorm(nplot,-0.15*C_year12,0.2),
-           rain_year23 = rep(rnorm(nplot/nplotpersquare,0,1),each = nplotpersquare),
+            rain_year23 = rep(rnorm(nplot/nplotpersquare,0,1),each = nplotpersquare),
            Sdep_year23 = rep(rnorm(nsquare, Sdep_year12[seq(1,nplot,nplotpersquare)], 0.1),each=5),
            Ndep_year23 = rep(rnorm(nsquare, Ndep_year12[seq(1,nplot,nplotpersquare)], 0.1), each = 5)) %>%
     mutate(N_year23 = N_year12 + rnorm(nplot, -0.1*N_year12 +
-                                         0.5*Ndep_year23 + (C_year23 - C_year12),
+                                         0.5*Ndep_year23,
                                        0.1)) %>%
     mutate(pH_diffYear23 = rstudent_t(nplot, 4,
                                       0.5*Improved+(1-Improved)*0.5*Sdep_year23 + 
@@ -47,12 +46,11 @@ sim_func <- function(nsquare = 50, nplotpersquare = 5){
                                          (pH_year2>5.5)*-0.5*N_year23,ELL_SE_year23)) %>%
     mutate(pH_year3 = pH_year2 + pH_diffYear23,
            Ell_year3 = Ell_year2 + Ell_diffYear23,
-           C_year34 = C_year12 + rnorm(nplot,-0.15*C_year12,0.2),
            rain_year34 = rep(rnorm(nplot/nplotpersquare,-0.5,1),each = nplotpersquare),
            Sdep_year34 = rep(rnorm(nsquare, Sdep_year23[seq(1,nplot,nplotpersquare)], 0.1),each=5),
            Ndep_year34 = rep(rnorm(nsquare, Ndep_year23[seq(1,nplot,nplotpersquare)], 0.1), each = 5)) %>%
     mutate(N_year34 = N_year23 + rnorm(nplot, -0.1*N_year23 +
-                                         0.5*Ndep_year34 + (C_year34 - C_year23),
+                                         0.5*Ndep_year34,
                                        0.1)) %>%
     mutate(pH_diffYear34 = rstudent_t(nplot, 4,
                                       0.5*Improved+(1-Improved)*0.5*Sdep_year34 + 
@@ -64,7 +62,7 @@ sim_func <- function(nsquare = 50, nplotpersquare = 5){
     select(SQUARE, REP_ID, Improved,
            Sdep_year12, Sdep_year23, Sdep_year34, Ndep_year12, Ndep_year23, Ndep_year34, 
            rain_year12, rain_year23, rain_year34,
-           C_year12, C_year23, C_year34, N_year12, N_year23, N_year34,
+           N_year12, N_year23, N_year34,
            PH_SE_year12, PH_SE_year23, PH_SE_year34,
            ELL_SE_year12, ELL_SE_year23, ELL_SE_year34,
            PH_year12 = pH_diffYear12, PH_year23 = pH_diffYear23, PH_year34 = pH_diffYear34,
@@ -79,7 +77,6 @@ sim_func <- function(nsquare = 50, nplotpersquare = 5){
   mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
               prior(normal(0,0.5), class = "b", resp = "PH"),
               prior(normal(0,0.5), class = "b", resp = "N"),
-              prior(normal(0.8,0.2), class = "b", coef = "C", resp = "N"),
               prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
               prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
               prior(normal(0,0.25), class = "Intercept", resp = "PH"),
@@ -102,7 +99,7 @@ sim_func <- function(nsquare = 50, nplotpersquare = 5){
                     family = "student") +
                    bf(PH | mi(PH_SE)  ~ Improved*Sdep + rain + (1|SQUARE) +
                         ar(time = YRnm, gr = REP_ID), family = "student") + 
-                   bf(N ~ Ndep + C + (1|SQUARE) +
+                   bf(N ~ Ndep + (1|SQUARE) +
                         ar(time = YRnm, gr = REP_ID)) +
                    set_rescor(FALSE), data = sim_data, prior = mod_pr,
                  save_pars = save_pars(all = TRUE, latent = TRUE), 
@@ -116,7 +113,7 @@ sim_func <- function(nsquare = 50, nplotpersquare = 5){
   
   # rerun if there are divergent transitions 
   # happens once, if setting adapt delta to 0.99 doesn't fix it then discard model results later
-  if(sum(divergent)>0){
+  if(sum(divergent)>0 & max(rhat(sim_mod))<1.05){
     sim_mod <- update(sim_mod, cores = 4, iter = 4000, 
                       save_pars = save_pars(all = TRUE, latent = TRUE), 
                       control = list(adapt_delta = 0.99))
@@ -134,7 +131,15 @@ sim_func <- function(nsquare = 50, nplotpersquare = 5){
   
   # if divergent okay, rhat okay and neff okay then calculate if estimates
   # within the 50 and 90% CI
-  sim_pars <- c(0,0,0,0.5,0.5,0.5,0.3,-0.5,0.5,1,0,0,0,0,0,0,0,0,0,1,-0.5)
+  # Parameters:
+  # [1] "Ell_Intercept"            "PH_Intercept"             "N_Intercept"             
+  # [4] "Ell_Improved"             "PH_Improved"              "PH_Sdep"                 
+  # [7] "PH_rain"                  "PH_Improved:Sdep"         "N_Ndep"                  
+  # [10] "Ell_sYear1_pHNImproved_1" "Ell_sYear1_pHNImproved_2" "Ell_sYear1_pHNImproved_3"
+  # [13] "Ell_sYear1_pHNImproved_4" "Ell_sYear1_pHNImproved_5" "Ell_sYear1_pHNImproved_6"
+  # [16] "Ell_sYear1_pHNImproved_7" "Ell_sYear1_pHNImproved_8" "Ell_sYear1_pHNImproved_9"
+  # [19] "Ell_miPH"                 "Ell_miPH:Improved" 
+  sim_pars <- c(0,0,0,0.5,0.5,0.5,0.3,-0.5,0.5,0,0,0,0,0,0,0,0,0,1,-0.5)
   if(sum(divergent) == 0 & max(rhat(sim_mod))<1.05 & min(neff_ratio(sim_mod))>0.05){
     par_vals <- fixef(sim_mod, probs = c(0.05,0.25,0.75,0.95))
     
