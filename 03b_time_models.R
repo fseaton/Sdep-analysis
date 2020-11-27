@@ -258,57 +258,20 @@ wh_w + wh_uw + sm_w + sm_uw +
 ggsave("Ellenberg R and pH by year model results.png",
        path = "Outputs/Models/Year_models/", width =20, height = 30, units = "cm")
 
-# Habitat
-BH <- select(VEGETATION_PLOTS_20161819, REP_ID = REP_ID_NEW,
-             BH = BH_PLOT) %>%
-  mutate(Year = 2019) %>%
-  full_join(mutate(select(CS07_IBD, REP_ID = REP_ID07, BH = BH07), Year = 2007)) %>%
-  full_join(mutate(select(CS98_IBD, REP_ID = REP_ID98, BH = BH98), Year = 1998)) %>%
-  full_join(mutate(select(CS90_IBD, REP_ID = REP_ID90, BH = BH90), Year = 1990)) %>%
-  full_join(mutate(select(CS78_IBD, REP_ID = REP_ID78, BH = BH78), Year = 1978)) %>%
-  filter(grepl("X",REP_ID)) %>%
-  mutate(Habitat = ifelse(BH == 1, 
-                          "Broadleaved",
-                          ifelse(BH == 2, 
-                                 "Coniferous",
-                                 ifelse(BH %in% c(4,5,6),
-                                        "Improved", 
-                                        ifelse(BH %in% c(7,8,9,10,11,12,15,16), 
-                                               "Habitat","Other"))))) %>%
-  select(-BH) %>% unique()
-
-# some repeat allocations - if broadleaved or something else assume broadleaved,
-# if habitat or something else (other than broadleaved) assume habitat. There is
-# no coniferous woodland in the duplicates
-dupes <- janitor::get_dupes(BH, REP_ID, Year) %>%
-  select(-dupe_count) %>%
-  mutate(Hab_order = ifelse(Habitat == "Broadleaved",1,
-                            ifelse(Habitat == "Habitat", 2,
-                                   ifelse(Habitat == "Improved", 3, 4)))) %>%
-  group_by(REP_ID, Year) %>% 
-  summarise(Hab = min(Hab_order)) %>%
-  mutate(Habitat = ifelse(Hab == 1, "Broadleaved",
-                          ifelse(Hab == 2, "Habitat",
-                                 ifelse(Hab == 3, "Improved", "Other")))) %>%
-  select(-Hab)
-dupes %>% print(n = 28)
-
-BH <- BH %>% filter(!REP_ID %in% dupes$REP_ID) %>%
-  rbind(dupes)
-janitor::get_dupes(BH, Year, REP_ID) # now no duplicates
-
-
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ####
+# Habitat ####
 # combined data
-Comb <- full_join(BH, X_Ell) %>% full_join(PH_long)
+Comb <- full_join(X_Ell, PH_long) %>% left_join(BH_IMP) %>%
+  filter(!is.na(Management))
 str(Comb)
-mice::md.pattern(select(Comb, Year, REP_ID, Habitat, contains("_R_"),
+mice::md.pattern(select(Comb, Year, REP_ID, Management, contains("_R_"),
                         pH, pH_CaCl2))
 janitor::get_dupes(Comb, REP_ID, Year) # no dupes
 
 Comb %>%
-  select(Year, Habitat, contains("_R_"),
+  select(Year, Management, contains("_R_"),
          pH, pH_CaCl2) %>%
-  group_by(Year, Habitat) %>%
+  group_by(Year, Management) %>%
   summarise(across(.fns = list(LLmean = ~ mean(.x, na.rm = TRUE),
                                LLsem = ~ sd(.x, na.rm = TRUE)/sqrt(length(na.omit(.x)))))) %>%
   pivot_longer(cols = SM_R_W_LLmean:pH_CaCl2_LLsem,
@@ -323,12 +286,12 @@ mod_data <- mutate(Comb,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
   mutate(YRnm = as.integer(YR),
-         Habitat = replace_na(Habitat, "Other")) %>%
-  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, Habitat) %>%
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, Management) %>%
   na.omit()
 
 # Year models 
-get_prior(ELL ~ YR*Habitat + (1|SERIES_NUM) + 
+get_prior(ELL ~ YR*Management + (1|SERIES_NUM) + 
             ar(time = YRnm, gr = REP_ID), data = mod_data)
 mod_pr <- c(prior(normal(0,0.5), class = "b"),
             prior(normal(5,0.5), class = "Intercept"),
@@ -336,19 +299,19 @@ mod_pr <- c(prior(normal(0,0.5), class = "b"),
             prior(student_t(3, 0, 1), class = "sd"))
 
 # weighted 4m2 Ellenberg R
-sm_r_w_hab_mod <- brm(ELL ~ YR*Habitat + (1|SERIES_NUM) +
+sm_r_w_hab_mod <- brm(ELL ~ YR*Management + (1|SERIES_NUM) +
                         ar(time = YRnm, gr = REP_ID), prior = mod_pr,
-                      data = mod_data, cores = 6, iter = 8000,
+                      data = mod_data, cores = 4, iter = 4000,
                       file = paste0("Outputs/Models/Year_models/SM_R_W_HAB-brms-", Sys.Date()))
 summary(sm_r_w_hab_mod)
 plot(sm_r_w_hab_mod)
 pp_check(sm_r_w_hab_mod)
 pp_check(sm_r_w_hab_mod, type = "stat_2d")
-pr <- predict(sm_r_w_hab_mod, summary = FALSE)
-str(pr)
-bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$ELL)), pr,
-                            group = as.character(
-                              as.data.frame(mod_data)[!is.na(mod_data$ELL),"YR"]))
+# pr <- predict(sm_r_w_hab_mod, summary = FALSE)
+# str(pr)
+# bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$ELL)), pr,
+#                             group = as.character(
+#                               as.data.frame(mod_data)[!is.na(mod_data$ELL),"YR"]))
 plot(conditional_effects(sm_r_w_hab_mod), ask = FALSE)
 
 
@@ -359,21 +322,21 @@ mod_data <- mutate(Comb,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
   mutate(YRnm = as.integer(YR),
-         Habitat = replace_na(Habitat, "Other")) %>%
-  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, Habitat) %>%
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, Management) %>%
   na.omit()
 
-sm_r_uw_hab_mod <- update(sm_r_w_mod, newdata = mod_data, cores = 8, iter = 8000,
+sm_r_uw_hab_mod <- update(sm_r_w_hab_mod, newdata = mod_data, cores = 4, iter = 4000,
                           file = paste0("Outputs/Models/Year_models/SM_R_UW_HAB-brms",Sys.Date()))
 summary(sm_r_uw_hab_mod)
 plot(sm_r_uw_hab_mod)
 pp_check(sm_r_uw_hab_mod)
 pp_check(sm_r_uw_hab_mod, type = "stat_2d")
-pr <- predict(sm_r_uw_hab_mod, summary = FALSE)
-str(pr)
-bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$ELL)), pr,
-                            group = as.character(
-                              as.data.frame(mod_data)[!is.na(mod_data$ELL),"YR"]))
+# pr <- predict(sm_r_uw_hab_mod, summary = FALSE)
+# str(pr)
+# bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$ELL)), pr,
+#                             group = as.character(
+#                               as.data.frame(mod_data)[!is.na(mod_data$ELL),"YR"]))
 plot(conditional_effects(sm_r_uw_hab_mod), ask = FALSE)
 
 
@@ -384,21 +347,21 @@ mod_data <- mutate(Comb,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
   mutate(YRnm = as.integer(YR),
-         Habitat = replace_na(Habitat, "Other")) %>%
-  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, Habitat) %>%
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, Management) %>%
   na.omit()
 
-wh_r_uw_hab_mod <- update(sm_r_w_mod, newdata = mod_data, cores = 8, iter = 8000,
+wh_r_uw_hab_mod <- update(sm_r_w_hab_mod, newdata = mod_data, cores = 4, iter = 4000,
                           file = paste0("Outputs/Models/Year_models/WH_R_UW_HAB-brms",Sys.Date()))
 summary(wh_r_uw_hab_mod)
 plot(wh_r_uw_hab_mod)
 pp_check(wh_r_uw_hab_mod)
 pp_check(wh_r_uw_hab_mod, type = "stat_2d")
-pr <- predict(wh_r_uw_hab_mod, summary = FALSE)
-str(pr)
-bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$ELL)), pr,
-                            group = as.character(
-                              as.data.frame(mod_data)[!is.na(mod_data$ELL),"YR"]))
+# pr <- predict(wh_r_uw_hab_mod, summary = FALSE)
+# str(pr)
+# bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$ELL)), pr,
+#                             group = as.character(
+#                               as.data.frame(mod_data)[!is.na(mod_data$ELL),"YR"]))
 plot(conditional_effects(wh_r_uw_hab_mod), ask = FALSE)
 
 # unweighted 200m2 plot
@@ -408,76 +371,219 @@ mod_data <- mutate(Comb,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
   mutate(YRnm = as.integer(YR),
-         Habitat = replace_na(Habitat, "Other")) %>%
-  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, Habitat) %>%
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, Management) %>%
   na.omit()
 
-wh_r_w_hab_mod <- update(sm_r_w_mod, newdata = mod_data, cores = 8, iter = 8000,
+wh_r_w_hab_mod <- update(sm_r_w_hab_mod, newdata = mod_data, cores = 4, iter = 4000,
                          file = paste0("Outputs/Models/Year_models/WH_R_W_HAB-brms",Sys.Date()))
 summary(wh_r_w_hab_mod)
 plot(wh_r_w_hab_mod)
 pp_check(wh_r_w_hab_mod)
 pp_check(wh_r_w_hab_mod, type = "stat_2d")
-pr <- predict(wh_r_w_hab_mod, summary = FALSE)
-str(pr)
-bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$ELL)), pr,
-                            group = as.character(
-                              as.data.frame(mod_data)[!is.na(mod_data$ELL),"YR"]))
+# pr <- predict(wh_r_w_hab_mod, summary = FALSE)
+# str(pr)
+# bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$ELL)), pr,
+#                             group = as.character(
+#                               as.data.frame(mod_data)[!is.na(mod_data$ELL),"YR"]))
 plot(conditional_effects(wh_r_w_hab_mod), ask = FALSE)
 
 
 # nice conditional effect plots
 wh_w <- wh_r_w_hab_mod %>%
-  emmeans( ~ YR | Habitat) %>%
+  emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
-  filter(Habitat != "Other") %>%
-  mutate(Year = as.numeric(as.character(YR)),
-         Habitat = recode(Habitat, "Habitat" = "Other")) %>%
-  ggplot(aes(x = Year, y = .value)) +
-  stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
-  # scale_y_continuous(limits = c(3,6))+
-  facet_wrap(~Habitat, nrow = 1) +
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value, 
+             fill = Management, colour = Management)) +
+  stat_lineribbon(alpha = 1/4) +
+  scale_y_continuous(limits = c(4,6))+
   labs(y = bquote("Cover weighted Ellenberg R 200m"^2))
 wh_uw <- wh_r_uw_hab_mod %>%
-  emmeans( ~ YR | Habitat) %>%
+  emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
-  filter(Habitat != "Other") %>%
-  mutate(Year = as.numeric(as.character(YR)),
-         Habitat = recode(Habitat, "Habitat" = "Other")) %>%
-  ggplot(aes(x = Year, y = .value)) +
-  stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
-  # scale_y_continuous(limits = c(3,6)) +
-  facet_wrap(~Habitat, nrow = 1) +
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value, 
+             fill = Management, colour = Management)) +
+  stat_lineribbon(alpha = 1/4) +
+  scale_y_continuous(limits = c(4,6)) +
   labs(y = bquote("Unweighted Ellenberg R 200m"^2))
 sm_w <- sm_r_w_hab_mod %>%
-  emmeans( ~ YR | Habitat) %>%
+  emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
-  filter(Habitat != "Other") %>%
-  mutate(Year = as.numeric(as.character(YR)),
-         Habitat = recode(Habitat, "Habitat" = "Other")) %>%
-  ggplot(aes(x = Year, y = .value)) +
-  stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
-  # scale_y_continuous(limits = c(3,6)) +
-  facet_wrap(~Habitat, nrow = 1) +
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value,
+             fill = Management, colour = Management)) +
+  stat_lineribbon(alpha = 1/4) +
+  scale_y_continuous(limits = c(4,6)) +
   labs(y = bquote("Cover weighted Ellenberg R 4m"^2))
 sm_uw <- sm_r_uw_hab_mod %>%
-  emmeans( ~ YR | Habitat) %>%
+  emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
-  filter(Habitat != "Other") %>%
-  mutate(Year = as.numeric(as.character(YR)),
-         Habitat = recode(Habitat, "Habitat" = "Other")) %>%
-  ggplot(aes(x = Year, y = .value)) +
-  stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
-  # scale_y_continuous(limits = c(3,6)) +
-  facet_wrap(~Habitat, nrow = 1) +
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value,
+             colour = Management, fill = Management)) +
+  stat_lineribbon(alpha = 1/4) +
+  scale_y_continuous(limits = c(4,6)) +
   labs(y = bquote("Unweighted Ellenberg R 4m"^2))
 
-wh_w + wh_uw + sm_w + sm_uw + plot_layout(ncol = 1)
-ggsave("Ellenberg R versus time by habitat no coastal model results variable y limits.png",
+wh_w + wh_uw + sm_w + sm_uw + plot_layout(guides = "collect") 
+ggsave("Ellenberg R versus time by Management variable y limits.png",
+       path = "Outputs/Models/Year_models/",
+       width = 20, height = 20, units = "cm")
+
+# Ell w/meas error ####
+
+ELL_QA_year <- data.frame(
+  Year = c(1978,1990,1998,2007,2019),
+  SM_UW_SE_NORM = c(0.240,0.240,0.229,0.308,0.320),
+  SM_W_SE_NORM = c(0.396,0.396,0.312,0.468,0.480),
+  WH_UW_SE_NORM = c(0.204,0.204,0.198,0.236,0.181),
+  WH_W_SE_NORM = c(0.298,0.298,0.239,0.319,0.419)
+)
+
+Comb <- left_join(Comb, ELL_QA_year)
+
+
+mod_data <- mutate(Comb, 
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+                   ELL = SM_R_W,
+                   ELL_SE = SM_W_SE_NORM,
+                   YR = as.factor(Year)) %>%
+  ungroup() %>%
+  mutate(YRnm = as.integer(YR),
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, ELL_SE, Management) %>%
+  na.omit()
+
+# Year models 
+get_prior(ELL | mi(ELL_SE) ~ YR*Management + (1|SERIES_NUM) + 
+            ar(time = YRnm, gr = REP_ID), data = mod_data)
+mod_pr <- c(prior(normal(0,0.5), class = "b"),
+            prior(normal(5,0.5), class = "Intercept"),
+            prior(normal(0.5,0.2), class = "ar"),
+            prior(student_t(3, 0, 1), class = "sd"))
+
+# weighted 4m2 Ellenberg R
+sm_r_w_hab_me_mod <- brm(ELL | mi(ELL_SE) ~ YR*Management + (1|SERIES_NUM) +
+                           ar(time = YRnm, gr = REP_ID), prior = mod_pr,
+                         data = mod_data, cores = 4, iter = 6000,
+                         file = paste0("Outputs/Models/Year_models/SM_R_W_HAB_me-brms-", Sys.Date()))
+summary(sm_r_w_hab_me_mod)
+plot(sm_r_w_hab_me_mod, ask = FALSE)
+pp_check(sm_r_w_hab_me_mod)
+pp_check(sm_r_w_hab_me_mod, type = "stat_2d")
+plot(conditional_effects(sm_r_w_hab_me_mod), ask = FALSE)
+
+
+# unweighted 4m2 plot
+mod_data <- mutate(Comb, 
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+                   ELL = SM_R_UW,
+                   ELL_SE = SM_UW_SE_NORM,
+                   YR = as.factor(Year)) %>%
+  ungroup() %>%
+  mutate(YRnm = as.integer(YR),
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, ELL_SE, Management) %>%
+  na.omit()
+
+sm_r_uw_hab_me_mod <- update(sm_r_w_hab_me_mod, newdata = mod_data, 
+                             cores = 4, iter = 6000,
+                             file = paste0("Outputs/Models/Year_models/SM_R_UW_HAB_me-brms",Sys.Date()))
+summary(sm_r_uw_hab_me_mod)
+plot(sm_r_uw_hab_me_mod, ask = FALSE)
+pp_check(sm_r_uw_hab_me_mod)
+pp_check(sm_r_uw_hab_me_mod, type = "stat_2d")
+plot(conditional_effects(sm_r_uw_hab_me_mod), ask = FALSE)
+
+
+# unweighted 200m2 plot
+mod_data <- mutate(Comb, 
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+                   ELL = WH_R_UW,
+                   ELL_SE = WH_UW_SE_NORM,
+                   YR = as.factor(Year)) %>%
+  ungroup() %>%
+  mutate(YRnm = as.integer(YR),
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, ELL_SE, Management) %>%
+  na.omit()
+
+wh_r_uw_hab_me_mod <- update(sm_r_w_hab_me_mod, newdata = mod_data, 
+                             cores = 4, iter = 6000,
+                             file = paste0("Outputs/Models/Year_models/WH_R_UW_HAB_me-brms",Sys.Date()))
+summary(wh_r_uw_hab_me_mod)
+plot(wh_r_uw_hab_me_mod, ask = FALSE)
+pp_check(wh_r_uw_hab_me_mod)
+pp_check(wh_r_uw_hab_me_mod, type = "stat_2d")
+plot(conditional_effects(wh_r_uw_hab_me_mod), ask = FALSE)
+
+# unweighted 200m2 plot
+mod_data <- mutate(Comb, 
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+                   ELL = WH_R_W,
+                   ELL_SE = WH_R_SE_NORM,
+                   YR = as.factor(Year)) %>%
+  ungroup() %>%
+  mutate(YRnm = as.integer(YR),
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, ELL, ELL_SE, Management) %>%
+  na.omit()
+
+wh_r_w_hab_me_mod <- update(sm_r_w_hab_me_mod, newdata = mod_data, 
+                            cores = 4, iter = 6000,
+                            file = paste0("Outputs/Models/Year_models/WH_R_W_HAB_me-brms",Sys.Date()))
+summary(wh_r_w_hab_me_mod)
+plot(wh_r_w_hab_me_mod, ask = FALSE)
+pp_check(wh_r_w_hab_me_mod)
+pp_check(wh_r_w_hab_me_mod, type = "stat_2d")
+plot(conditional_effects(wh_r_w_hab_me_mod), ask = FALSE)
+
+
+# nice conditional effect plots
+wh_w <- wh_r_w_hab_mod %>%
+  emmeans( ~ YR | Management) %>%
+  gather_emmeans_draws() %>%
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value, 
+             fill = Management, colour = Management)) +
+  stat_lineribbon(alpha = 1/4) +
+  scale_y_continuous(limits = c(4,6))+
+  labs(y = bquote("Cover weighted Ellenberg R 200m"^2))
+wh_uw <- wh_r_uw_hab_mod %>%
+  emmeans( ~ YR | Management) %>%
+  gather_emmeans_draws() %>%
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value, 
+             fill = Management, colour = Management)) +
+  stat_lineribbon(alpha = 1/4) +
+  scale_y_continuous(limits = c(4,6)) +
+  labs(y = bquote("Unweighted Ellenberg R 200m"^2))
+sm_w <- sm_r_w_hab_mod %>%
+  emmeans( ~ YR | Management) %>%
+  gather_emmeans_draws() %>%
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value,
+             fill = Management, colour = Management)) +
+  stat_lineribbon(alpha = 1/4) +
+  scale_y_continuous(limits = c(4,6)) +
+  labs(y = bquote("Cover weighted Ellenberg R 4m"^2))
+sm_uw <- sm_r_uw_hab_mod %>%
+  emmeans( ~ YR | Management) %>%
+  gather_emmeans_draws() %>%
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value,
+             colour = Management, fill = Management)) +
+  stat_lineribbon(alpha = 1/4) +
+  scale_y_continuous(limits = c(4,6)) +
+  labs(y = bquote("Unweighted Ellenberg R 4m"^2))
+
+wh_w + wh_uw + sm_w + sm_uw + plot_layout(guides = "collect")
+ggsave("Ellenberg R versus time by Management with measurement error variable y limits.png",
        path = "Temp/", width = 30, height = 30, units = "cm")
 
-
-# pH models
+# pH models ####
 mod_data <- mutate(Comb, 
                    SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    PH = pH,
@@ -485,12 +591,12 @@ mod_data <- mutate(Comb,
   filter(Year != 2016) %>%
   ungroup() %>%
   mutate(YRnm = as.integer(YR),
-         Habitat = replace_na(Habitat, "Other")) %>%
-  select(REP_ID, SERIES_NUM, YR, YRnm, PH, Habitat) %>%
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, PH, Management) %>%
   na.omit() %>% droplevels()
 
 # Year models 
-get_prior(PH ~ YR*Habitat + (1|SERIES_NUM) + 
+get_prior(PH ~ YR*Management + (1|SERIES_NUM) + 
             ar(time = YRnm, gr = REP_ID), data = mod_data)
 mod_pr <- c(prior(normal(0,0.5), class = "b"),
             prior(normal(5,0.5), class = "Intercept"),
@@ -498,9 +604,9 @@ mod_pr <- c(prior(normal(0,0.5), class = "b"),
             prior(student_t(3, 0, 1), class = "sd"))
 
 #  pH in water
-ph_hab_mod <- brm(PH ~ YR*Habitat + (1|SERIES_NUM) +
+ph_hab_mod <- brm(PH ~ YR*Management + (1|SERIES_NUM) +
                     ar(time = YRnm, gr = REP_ID), prior = mod_pr,
-                  data = mod_data, cores = 8, iter = 8000,
+                  data = mod_data, cores = 4, iter = 4000,
                   file = paste0("Outputs/Models/Year_models/PH_hab-brms-", Sys.Date()))
 summary(ph_hab_mod)
 plot(ph_hab_mod)
@@ -514,17 +620,17 @@ bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$PH)), pr,
 plot(conditional_effects(ph_hab_mod), ask = FALSE)
 
 ph_pl <- ph_hab_mod %>%
-  emmeans( ~ YR | Habitat) %>%
+  emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
-  filter(Habitat != "Other") %>%
+  filter(Management != "Other") %>%
   mutate(Year = as.numeric(as.character(YR)),
-         Habitat = recode(Habitat, "Habitat" = "Other")) %>%
+         Management = recode(Management, "Management" = "Other")) %>%
   ggplot(aes(x = Year, y = .value)) +
   stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
-  facet_wrap(~Habitat) +
+  facet_wrap(~Management) +
   labs(y = "pH")
 ph_pl
-ggsave("pH versus time by habitat.png", path = "Outputs/Models/Year_models/",
+ggsave("pH versus time by Management.png", path = "Outputs/Models/Year_models/",
        width = 20, height = 18, units = "cm")
 
 # pH in CaCl2
@@ -535,11 +641,11 @@ mod_data <- mutate(Comb,
   filter(Year != 2016) %>%
   ungroup() %>%
   mutate(YRnm = as.integer(YR),
-         Habitat = replace_na(Habitat, "Other")) %>%
-  select(REP_ID, SERIES_NUM, YR, YRnm, PH, Habitat) %>%
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, PH, Management) %>%
   na.omit() %>% droplevels()
 
-ph_c_hab_mod <- update(ph_hab_mod, newdata = mod_data, cores = 8, iter = 8000,
+ph_c_hab_mod <- update(ph_hab_mod, newdata = mod_data, cores = 4, iter = 4000,
                        file = paste0("Outputs/Models/Year_models/PH_C_HAB-brms",Sys.Date()))
 summary(ph_c_hab_mod)
 plot(ph_c_hab_mod)
@@ -552,8 +658,93 @@ bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$PH)), pr,
                               as.data.frame(mod_data)[!is.na(mod_data$PH),"YR"]))
 plot(conditional_effects(ph_c_hab_mod), ask = FALSE)
 
+# pH w/meas error ####
+PH_QA <- data.frame(Year = c(2007,2019),
+                    PH_SE = c(0.252,0.165),
+                    PHC_SE = c(0.226,0.119))
 
-# pH against rainfall
+Comb_PH_QA <- left_join(Comb, PH_QA) %>%
+  filter(Year > 2005)
+
+mod_data <- mutate(Comb_PH_QA, 
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+                   PH = pH,
+                   YR = as.factor(Year)) %>%
+  filter(Year != 2016) %>%
+  ungroup() %>%
+  mutate(YRnm = as.integer(YR),
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, PH, PH_SE, Management) %>%
+  na.omit() %>% droplevels()
+
+# Year models 
+get_prior(PH | mi(PH_SE) ~ YR*Management + (1|SERIES_NUM) + 
+            ar(time = YRnm, gr = REP_ID), data = mod_data)
+mod_pr <- c(prior(normal(0,0.5), class = "b"),
+            prior(normal(5,0.5), class = "Intercept"),
+            prior(normal(0.5,0.2), class = "ar"),
+            prior(student_t(3, 0, 1), class = "sd"))
+
+#  pH in water
+ph_hab_me_mod <- brm(PH | mi(PH_SE) ~ YR*Management + (1|SERIES_NUM) +
+                       ar(time = YRnm, gr = REP_ID), prior = mod_pr,
+                     data = mod_data, cores = 4, iter = 4000,
+                     file = paste0("Outputs/Models/Year_models/PH_hab_me-brms-", Sys.Date()))
+summary(ph_hab_me_mod)
+plot(ph_hab_me_mod)
+pp_check(ph_hab_me_mod)
+pp_check(ph_hab_me_mod, type = "stat_2d")
+plot(conditional_effects(ph_hab_me_mod), ask = FALSE)
+
+ph_pl <- ph_hab_me_mod %>%
+  emmeans( ~ YR | Management) %>%
+  gather_emmeans_draws() %>%
+  filter(Management != "Other") %>%
+  mutate(Year = as.numeric(as.character(YR)),
+         Management = recode(Management, "Management" = "Other")) %>%
+  ggplot(aes(x = Year, y = .value)) +
+  stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
+  facet_wrap(~Management) +
+  labs(y = "pH (DIW)")
+
+# pH in CaCl2
+mod_data <- mutate(Comb_PH_QA, 
+                   SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+                   PH = pH_CaCl2,
+                   PH_SE = PHC_SE,
+                   YR = as.factor(Year)) %>%
+  filter(Year != 2016) %>%
+  ungroup() %>%
+  mutate(YRnm = as.integer(YR),
+         Management = replace_na(Management, "Other")) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, PH, Management) %>%
+  na.omit() %>% droplevels()
+
+ph_c_hab_me_mod <- update(ph_hab_me_mod, newdata = mod_data, cores = 4, iter = 4000,
+                          file = paste0("Outputs/Models/Year_models/PH_C_HAB_me-brms",Sys.Date()))
+summary(ph_c_hab_me_mod)
+plot(ph_c_hab_me_mod)
+pp_check(ph_c_hab_me_mod)
+pp_check(ph_c_hab_me_mod, type = "stat_2d")
+plot(conditional_effects(ph_c_hab_me_mod), ask = FALSE)
+
+phc_pl <- ph_c_hab_me_mod %>%
+  emmeans( ~ YR | Management) %>%
+  gather_emmeans_draws() %>%
+  filter(Management != "Other") %>%
+  mutate(Year = as.numeric(as.character(YR)),
+         Management = recode(Management, "Management" = "Other")) %>%
+  ggplot(aes(x = Year, y = .value)) +
+  stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
+  facet_wrap(~Management) +
+  labs(y = bquote("pH CaCl"[2]))
+ph_pl + phc_pl
+ggsave("pH against year with measurement error.png",
+       path = "Outputs/Models/Year_models/",
+       width = 20, height = 18, units = "cm")
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~ ####
+# pH against rainfall ####
 str(Comb)
 Comb_rain <- cs_survey_rainfall %>%
   mutate(Year = as.numeric(Year)) %>%
@@ -577,25 +768,25 @@ Comb_rain %>%
 
 # Bayesian model
 mod_data <- Comb_rain %>% ungroup() %>%
-  select(Year, REP_ID, mean_rainfall, pH, Habitat, rain_diff_sum, RAIN_8110) %>%
+  select(Year, REP_ID, mean_rainfall, pH, Management, rain_diff_sum, RAIN_8110) %>%
   mutate(YR = as.factor(Year),
          SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1)) %>%
   mutate(YRnm = as.integer(YR)) %>%
   na.omit()
 
-get_prior(pH ~ Year + Habitat + rain_diff_sum + RAIN_8110 + (1|SERIES_NUM) +
+get_prior(pH ~ Year + Management + rain_diff_sum + RAIN_8110 + (1|SERIES_NUM) +
             ar(time = YRnm, gr = REP_ID), data = mod_data)
 mod_pr <- c(prior(normal(0,0.5), class = "b"),
             prior(normal(5,0.5), class = "Intercept"),
             prior(normal(0.5,0.2), class = "ar"),
             prior(student_t(3, 0, 1), class = "sd"))
-ph_rain_mod <- brm(pH ~ YR + Habitat + rain_diff_sum*RAIN_8110 + (1|SERIES_NUM) +
+ph_rain_mod <- brm(pH ~ YR + Management + rain_diff_sum*RAIN_8110 + (1|SERIES_NUM) +
                      ar(time = YRnm, gr = REP_ID), data = mod_data,
-                   prior = mod_pr, cores = 8, iter = 8000,
+                   prior = mod_pr, cores = 4, iter = 4000,
                    file = paste0("Outputs/Models/Year_models/ph_rain_mod_",Sys.Date()))
 # took forever to run and failed miserably
 
 ph_rain_mod_nohab <- brm(pH ~ YR + rain_diff_sum*RAIN_8110 + (1|SERIES_NUM) +
                            ar(time = YRnm, gr = REP_ID), data = mod_data,
-                         prior = mod_pr, cores = 8, iter = 8000,
+                         prior = mod_pr, cores = 4, iter = 4000,
                          file = paste0("Outputs/Models/Year_models/ph_rain_mod_",Sys.Date()))
