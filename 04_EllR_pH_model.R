@@ -1319,10 +1319,9 @@ mod_data <- ELL_pH %>%
 # Habitat interaction
 get_prior(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
                (1|SQUARE) +
-               ar(time = YRnm, gr = REP_ID),
-             family = "student") +
+               ar(time = YRnm, gr = REP_ID)) +
             bf(PH  ~ Management*Sdep + fieldseason_rain + (1|SQUARE) +
-                 ar(time = YRnm, gr = REP_ID), family = "student") + 
+                 ar(time = YRnm, gr = REP_ID)) + 
             bf(N ~ Ndep + (1|SQUARE) +
                  ar(time = YRnm, gr = REP_ID)) +
             set_rescor(FALSE), data = mod_data)
@@ -1335,8 +1334,6 @@ mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
             prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
             prior(normal(0,0.25), class = "Intercept", resp = "PH"),
             prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-            prior(gamma(4,1), class = "nu", resp = "Ell"),
-            prior(gamma(4,1), class = "nu", resp = "PH"),
             prior(normal(0,0.2), class = "ar", resp = "Ell"),
             prior(normal(0,0.2), class = "ar", resp = "PH"),
             prior(normal(0,0.2), class = "ar", resp = "N"),
@@ -1351,11 +1348,10 @@ mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
 # prior simulation
 prior_mod <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
                       (1|SQUARE) +
-                      ar(time = YRnm, gr = REP_ID),
-                    family = "student") +
+                      ar(time = YRnm, gr = REP_ID)) +
                    bf(PH  ~ Management*Sdep + fieldseason_rain  + s(Year1_pH, N, Management) +
                         (1|SQUARE) +
-                        ar(time = YRnm, gr = REP_ID), family = "student") + 
+                        ar(time = YRnm, gr = REP_ID)) + 
                    bf(N ~ Ndep + (1|SQUARE) +
                         ar(time = YRnm, gr = REP_ID))  +
                    set_rescor(FALSE), data = mod_data, prior = mod_pr,
@@ -1370,17 +1366,15 @@ plot(conditional_effects(prior_mod))
 # run model - full weighted Ell R
 full_mod_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
                          (1|SQUARE) +
-                         ar(time = YRnm, gr = REP_ID),
-                       family = "student") +
+                         ar(time = YRnm, gr = REP_ID)) +
                       bf(PH  ~ Management*Sdep + fieldseason_rain  + s(Year1_pH, N, Management) +
                            (1|SQUARE) +
-                           ar(time = YRnm, gr = REP_ID), family = "student") + 
+                           ar(time = YRnm, gr = REP_ID)) + 
                       bf(N ~ Ndep + (1|SQUARE) +
                            ar(time = YRnm, gr = REP_ID)) +
                       set_rescor(FALSE), data = mod_data, prior = mod_pr,
-                    save_pars = save_pars(all = TRUE, latent = TRUE), 
                     file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_spl_N_HAB",
-                    cores = 4, iter = 5000, control = list(adapt_delta = 0.95))
+                    cores = 4, iter = 4000, control = list(adapt_delta = 0.95))
 summary(full_mod_whw)
 plot(full_mod_whw, ask = FALSE)
 pp_check(full_mod_whw, nsamples = 50, resp = "Ell")
@@ -1388,9 +1382,6 @@ pp_check(full_mod_whw, nsamples = 50, resp = "PH")
 pp_check(full_mod_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_whw))
-
-full_mod_whw <- add_criterion(full_mod_whw, "loo",  moment_match = TRUE, 
-                              file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
 mod_pr_red1 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
@@ -1400,8 +1391,6 @@ mod_pr_red1 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "PH"),
                  prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-                 prior(gamma(4,1), class = "nu", resp = "Ell"),
-                 prior(gamma(4,1), class = "nu", resp = "PH"),
                  prior(normal(0,0.2), class = "ar", resp = "Ell"),
                  prior(normal(0,0.2), class = "ar", resp = "PH"),
                  prior(normal(0,0.2), class = "ar", resp = "N"),
@@ -1422,9 +1411,8 @@ red_mod_1_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) +
                        bf(N ~ Ndep + (1|SQUARE) +
                             ar(time = YRnm, gr = REP_ID)) +
                        set_rescor(FALSE), data = mod_data, prior = mod_pr_red1,
-                     save_pars = save_pars(all = TRUE, latent = TRUE), 
                      file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_N_HAB",
-                     cores = 4, iter = 5000, control = list(adapt_delta = 0.99))
+                     cores = 4, iter = 4000, control = list(adapt_delta = 0.99))
 summary(red_mod_1_whw)
 plot(red_mod_1_whw, ask = FALSE)
 pp_check(red_mod_1_whw, nsamples = 50, resp = "Ell")
@@ -1433,9 +1421,6 @@ pp_check(red_mod_1_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_whw))
 
-red_mod_1_whw <- add_criterion(red_mod_1_whw, "loo",  moment_match = TRUE, 
-                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_N_HAB")
-
 # No Ell ~ N spline
 mod_pr_red2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(normal(0,0.5), class = "b", resp = "PH"),
@@ -1443,8 +1428,6 @@ mod_pr_red2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "PH"),
                  prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-                 prior(gamma(4,1), class = "nu", resp = "Ell"),
-                 prior(gamma(4,1), class = "nu", resp = "PH"),
                  prior(normal(0,0.2), class = "ar", resp = "Ell"),
                  prior(normal(0,0.2), class = "ar", resp = "PH"),
                  prior(normal(0,0.2), class = "ar", resp = "N"),
@@ -1456,17 +1439,15 @@ mod_pr_red2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
 red_mod_2_whw <- brm(bf(Ell  ~ Management*PH + 
                           (1|SQUARE) +
-                          ar(time = YRnm, gr = REP_ID),
-                        family = "student") +
+                          ar(time = YRnm, gr = REP_ID)) +
                        bf(PH  ~ Management*Sdep + fieldseason_rain +
                             (1|SQUARE) +
-                            ar(time = YRnm, gr = REP_ID), family = "student") + 
+                            ar(time = YRnm, gr = REP_ID)) + 
                        bf(N ~ Ndep + (1|SQUARE) +
                             ar(time = YRnm, gr = REP_ID)) +
                        set_rescor(FALSE), data = mod_data, prior = mod_pr_red2,
-                     save_pars = save_pars(all = TRUE, latent = TRUE), 
                      file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_PH_N_HAB",
-                     cores = 4, iter = 5000, control = list(adapt_delta = 0.95))
+                     cores = 4, iter = 4000, control = list(adapt_delta = 0.95))
 summary(red_mod_2_whw)
 plot(red_mod_2_whw, ask = FALSE)
 pp_check(red_mod_2_whw, nsamples = 50, resp = "Ell")
@@ -1475,14 +1456,6 @@ pp_check(red_mod_2_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whw))
 
-red_mod_2_whw <- add_criterion(red_mod_2_whw, "loo",  moment_match = TRUE,
-                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_PH_N_HAB")
-
-loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw)
-# elpd_diff se_diff
-# full_mod_whw     0.0       0.0 
-# red_mod_2_whw -154.6      20.6 
-# red_mod_1_whw -157.0      20.3
 
 # ~~~ 200m2 unweighted ####
 mod_data <- ELL_pH %>%
@@ -1506,7 +1479,7 @@ mod_data <- ELL_pH %>%
 # run model - full unweighted Ell R
 full_mod_whuw <- update(full_mod_whw, newdata = mod_data,
                         control = list(adapt_delta = 0.95),
-                        cores = 4, iter = 5000,
+                        cores = 4, iter = 4000,
                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_spl_N_HAB")
 
 summary(full_mod_whuw)
@@ -1517,12 +1490,10 @@ pp_check(full_mod_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_whuw))
 
-full_mod_whuw <- add_criterion(full_mod_whuw, "loo",  moment_match = TRUE, 
-                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
 red_mod_1_whuw <- update(red_mod_1_whw, newdata = mod_data,
-                         cores = 4, iter = 5000,
+                         cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.99),
                          file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_N_HAB")
 
@@ -1534,11 +1505,9 @@ pp_check(red_mod_1_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_whuw))
 
-red_mod_1_whuw <- add_criterion(red_mod_1_whuw, "loo",  moment_match = TRUE, 
-                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_N_HAB")
 # No Ell ~ N spline
 red_mod_2_whuw <- update(red_mod_2_whw, newdata = mod_data,
-                         cores = 4, iter = 5000,
+                         cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.95),
                          file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_PH_N_HAB")
 
@@ -1550,14 +1519,6 @@ pp_check(red_mod_2_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whuw))
 
-red_mod_2_whuw <- add_criterion(red_mod_2_whuw, "loo",  moment_match = TRUE, 
-                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_PH_N_HAB")
-
-loo_compare(full_mod_whuw, red_mod_1_whuw, red_mod_2_whuw)
-# elpd_diff se_diff
-# full_mod_whuw     0.0       0.0 
-# red_mod_1_whuw -154.0      20.9 
-# red_mod_2_whuw -157.1      21.5 
 
 # ~~~ 4m2 weighted ####
 mod_data <- ELL_pH %>%
@@ -1580,7 +1541,7 @@ mod_data <- ELL_pH %>%
 # Habitat interaction
 # run model - small weighted Ell R
 full_mod_smw <- update(full_mod_whw, newdata = mod_data,
-                       cores = 4, iter = 5000,
+                       cores = 4, iter = 4000,
                        control = list(adapt_delta = 0.95),
                        file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_spl_N_HAB")
 
@@ -1592,12 +1553,10 @@ pp_check(full_mod_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_smw))
 
-full_mod_smw <- add_criterion(full_mod_smw, "loo",  moment_match = TRUE, 
-                              file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
 red_mod_1_smw <- update(red_mod_1_whw, newdata = mod_data,
-                        cores = 4, iter = 5000,
+                        cores = 4, iter = 4000,
                         control = list(adapt_delta = 0.99),
                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_N_HAB")
 
@@ -1609,11 +1568,9 @@ pp_check(red_mod_1_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_smw))
 
-red_mod_1_smw <- add_criterion(red_mod_1_smw, "loo",  moment_match = TRUE, 
-                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_N_HAB")
 # No Ell ~ N spline
 red_mod_2_smw <- update(red_mod_2_whw, newdata = mod_data,
-                        cores = 4, iter = 5000,
+                        cores = 4, iter = 4000,
                         control = list(adapt_delta = 0.95),
                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_PH_N_HAB")
 
@@ -1625,14 +1582,6 @@ pp_check(red_mod_2_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smw))
 
-red_mod_2_smw <- add_criterion(red_mod_2_smw, "loo",  moment_match = TRUE, 
-                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_PH_N_HAB")
-
-loo_compare(full_mod_smw, red_mod_1_smw, red_mod_2_smw)
-# elpd_diff se_diff
-# full_mod_smw     0.0       0.0 
-# red_mod_2_smw -172.5      19.8 
-# red_mod_1_smw -177.9      19.4 
 
 # ~~~ 4m2 unweighted ####
 mod_data <- ELL_pH %>%
@@ -1803,7 +1752,7 @@ ggsave("pH change on Ellenberg R over different time periods with data.png",
 # Habitat interaction
 # run model - small unweighted Ell R
 full_mod_smuw <- update(full_mod_whw, newdata = mod_data,
-                        cores = 4, iter = 5000,
+                        cores = 4, iter = 4000,
                         control = list(adapt_delta = 0.95),
                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_spl_N_HAB")
 
@@ -1813,28 +1762,26 @@ pp_check(full_mod_smuw, nsamples = 50, resp = "Ell")
 pp_check(full_mod_smuw, nsamples = 50, resp = "PH")
 pp_check(full_mod_smuw, nsamples = 50, resp = "N")
 
-mod_pr_norm <- c(prior(normal(0,0.5), class = "b"),
-                 prior(student_t(3, 0, 2.5), class = "sds"),
-                 prior(normal(0,0.25), class = "Intercept"),
-                 prior(normal(0,0.2), class = "ar"),
-                 prior(student_t(3,0,0.5), class = "sd"),
-                 prior(student_t(3,0,0.5), class = "sigma"))
-
-test_mod_norm <- brm(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
-                      (1|SQUARE) + ar(time = YRnm, gr = REP_ID), 
-                    data = mod_data, 
-                    prior = mod_pr_norm,
-                    save_pars = save_pars(all = TRUE), 
-                    cores = 4, iter = 5000)
+# mod_pr_norm <- c(prior(normal(0,0.5), class = "b"),
+#                  prior(student_t(3, 0, 2.5), class = "sds"),
+#                  prior(normal(0,0.25), class = "Intercept"),
+#                  prior(normal(0,0.2), class = "ar"),
+#                  prior(student_t(3,0,0.5), class = "sd"),
+#                  prior(student_t(3,0,0.5), class = "sigma"))
+# 
+# test_mod_norm <- brm(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
+#                       (1|SQUARE) + ar(time = YRnm, gr = REP_ID), 
+#                     data = mod_data, 
+#                     prior = mod_pr_norm,
+#                     save_pars = save_pars(all = TRUE), 
+#                     cores = 4, iter = 5000)
 
 # plot(conditional_effects(full_mod_smuw))
 
-full_mod_smuw <- add_criterion(full_mod_smuw, "loo",  moment_match = TRUE, 
-                               file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
 red_mod_1_smuw <- update(red_mod_1_whw, newdata = mod_data,
-                         cores = 4, iter = 5000,
+                         cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.99),
                          file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_N_HAB")
 
@@ -1846,11 +1793,9 @@ pp_check(red_mod_1_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_smuw))
 
-red_mod_1_smuw <- add_criterion(red_mod_1_smuw, "loo",  moment_match = TRUE, 
-                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_N_HAB")
 # No Ell ~ N spline
 red_mod_2_smuw <- update(red_mod_2_whw, newdata = mod_data,
-                         cores = 4, iter = 5000,
+                         cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.95),
                          file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_PH_N_HAB")
 
@@ -1862,14 +1807,6 @@ pp_check(red_mod_2_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smuw))
 
-red_mod_2_smuw <- add_criterion(red_mod_2_smuw, "loo",  moment_match = TRUE, 
-                                file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_PH_N_HAB")
-
-loo_compare(full_mod_smuw, red_mod_1_smuw, red_mod_2_smuw)
-# elpd_diff se_diff
-# full_mod_smuw     0.0       0.0 
-# red_mod_2_smuw -168.8      20.0 
-# red_mod_1_smuw -174.8      19.4
 
 # ~~ kfold criteria ####
 options(mc.cores = 5)
@@ -2468,8 +2405,8 @@ mod_data <- ELL_pH %>%
          Ell = WH_R_W) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO, ELL_SE = ELL_WH_W_SE, 
-         PH_SE = PH_DIW_SE) %>%
+         N = NC_RATIO, ELL_SE = ELL_WH_W_SE_NORM, 
+         PH_SE = PH_DIW_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
@@ -2679,8 +2616,8 @@ pp_check(full_mod_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_whw))
 
-full_mod_whw <- add_criterion(full_mod_whw, "loo",  moment_match = TRUE,
-                              file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_N_HAB")
+# full_mod_whw <- add_criterion(full_mod_whw, "loo",  moment_match = TRUE,
+#                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_N_HAB")
 
 
 # No pH ~ N spline
@@ -2712,7 +2649,7 @@ red_mod_1_whw <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, N) +
                        set_rescor(FALSE), data = mod_data, prior = mod_pr_red1,
                      save_pars = save_pars(all = TRUE, latent = TRUE), 
                      file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_N_HAB",
-                     cores = 4, iter = 5000, control = list(adapt_delta = 0.99))
+                     cores = 4, iter = 4000, control = list(adapt_delta = 0.99))
 summary(red_mod_1_whw)
 plot(red_mod_1_whw, ask = FALSE)
 pp_check(red_mod_1_whw, nsamples = 50, resp = "Ell")
@@ -2721,8 +2658,8 @@ pp_check(red_mod_1_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_whw))
 
-red_mod_1_whw <- add_criterion(red_mod_1_whw, "loo",  moment_match = TRUE,
-                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_N_HAB")
+# red_mod_1_whw <- add_criterion(red_mod_1_whw, "loo",  moment_match = TRUE,
+#                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_N_HAB")
 
 # No Ell ~ N spline
 mod_pr_red2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
@@ -2751,7 +2688,7 @@ red_mod_2_whw <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) +
                        set_rescor(FALSE), data = mod_data, prior = mod_pr_red2,
                      save_pars = save_pars(all = TRUE, latent = TRUE), 
                      file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_PH_N_HAB",
-                     cores = 4, iter = 5000, control = list(adapt_delta = 0.95))
+                     cores = 4, iter = 4000, control = list(adapt_delta = 0.999))
 summary(red_mod_2_whw)
 plot(red_mod_2_whw, ask = FALSE)
 pp_check(red_mod_2_whw, nsamples = 50, resp = "Ell")
@@ -2760,10 +2697,10 @@ pp_check(red_mod_2_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whw))
 
-red_mod_2_whw <- add_criterion(red_mod_2_whw, "loo",  moment_match = TRUE,
-                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_PH_N_HAB")
-
-loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw)
+# red_mod_2_whw <- add_criterion(red_mod_2_whw, "loo",  moment_match = TRUE,
+#                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_PH_N_HAB")
+# 
+# loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw)
 # elpd_diff se_diff
 # full_mod_whw     0.0       0.0 
 # red_mod_2_whw -154.6      20.6 
@@ -2777,8 +2714,8 @@ mod_data <- ELL_pH %>%
          Ell = WH_R_UW) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO, PH_SE = PH_DIW_SE,
-         ELL_SE = ELL_WH_UW_SE) %>%
+         N = NC_RATIO, PH_SE = PH_DIW_SE_NORM,
+         ELL_SE = ELL_WH_UW_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
@@ -2792,7 +2729,7 @@ mod_data <- ELL_pH %>%
 # run model - full unweighted Ell R
 full_mod_whuw <- update(full_mod_whw, newdata = mod_data,
                         control = list(adapt_delta = 0.95),
-                        cores = 4, iter = 5000,
+                        cores = 4, iter = 4000,
                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_spl_N_HAB")
 
 summary(full_mod_whuw)
@@ -2803,12 +2740,12 @@ pp_check(full_mod_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_whuw))
 
-full_mod_whuw <- add_criterion(full_mod_whuw, "loo",  moment_match = TRUE, 
-                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_spl_N_HAB")
+# full_mod_whuw <- add_criterion(full_mod_whuw, "loo",  moment_match = TRUE, 
+#                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
 red_mod_1_whuw <- update(red_mod_1_whw, newdata = mod_data,
-                         cores = 4, iter = 5000,
+                         cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.999),
                          file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_N_HAB")
 
@@ -2820,11 +2757,11 @@ pp_check(red_mod_1_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_whuw))
 
-red_mod_1_whuw <- add_criterion(red_mod_1_whuw, "loo",  moment_match = TRUE, 
-                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_N_HAB")
+# red_mod_1_whuw <- add_criterion(red_mod_1_whuw, "loo",  moment_match = TRUE, 
+#                                 file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_N_HAB")
 # No Ell ~ N spline
 red_mod_2_whuw <- update(red_mod_2_whw, newdata = mod_data,
-                         cores = 4, iter = 5000,
+                         cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.999),
                          file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_PH_N_HAB")
 
@@ -2836,10 +2773,10 @@ pp_check(red_mod_2_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whuw))
 
-red_mod_2_whuw <- add_criterion(red_mod_2_whuw, "loo",  moment_match = TRUE, 
-                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_PH_N_HAB")
+# red_mod_2_whuw <- add_criterion(red_mod_2_whuw, "loo",  moment_match = TRUE, 
+#                                 file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_PH_N_HAB")
 
-loo_compare(full_mod_whuw, red_mod_1_whuw, red_mod_2_whuw)
+# loo_compare(full_mod_whuw, red_mod_1_whuw, red_mod_2_whuw)
 # elpd_diff se_diff
 # full_mod_whuw     0.0       0.0 
 # red_mod_1_whuw -154.0      20.9 
@@ -2853,8 +2790,8 @@ mod_data <- ELL_pH %>%
          Ell = SM_R_W) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO, PH_SE = PH_DIW_SE,
-         ELL_SE = ELL_SM_W_SE) %>%
+         N = NC_RATIO, PH_SE = PH_DIW_SE_NORM,
+         ELL_SE = ELL_SM_W_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
@@ -2879,29 +2816,29 @@ pp_check(full_mod_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_smw))
 
-full_mod_smw <- add_criterion(full_mod_smw, "loo",  moment_match = TRUE, 
-                              file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_spl_N_HAB")
+# full_mod_smw <- add_criterion(full_mod_smw, "loo",  moment_match = TRUE, 
+#                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
-red_mod_1_smw <- update(red_mod_1_whw, newdata = mod_data,
-                        cores = 4, iter = 5000,
-                        control = list(adapt_delta = 0.99),
-                        file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_N_HAB")
-
-summary(red_mod_1_smw)
-plot(red_mod_1_smw, ask = FALSE)
-pp_check(red_mod_1_smw, nsamples = 50, resp = "Ell")
-pp_check(red_mod_1_smw, nsamples = 50, resp = "PH")
-pp_check(red_mod_1_smw, nsamples = 50, resp = "N")
+# red_mod_1_smw <- update(red_mod_1_whw, newdata = mod_data,
+#                         cores = 4, iter = 4000,
+#                         control = list(adapt_delta = 0.99),
+#                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_N_HAB")
+# 
+# summary(red_mod_1_smw)
+# plot(red_mod_1_smw, ask = FALSE)
+# pp_check(red_mod_1_smw, nsamples = 50, resp = "Ell")
+# pp_check(red_mod_1_smw, nsamples = 50, resp = "PH")
+# pp_check(red_mod_1_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_smw))
 
-red_mod_1_smw <- add_criterion(red_mod_1_smw, "loo",  moment_match = TRUE, 
-                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_N_HAB")
+# red_mod_1_smw <- add_criterion(red_mod_1_smw, "loo",  moment_match = TRUE, 
+#                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_N_HAB")
 # No Ell ~ N spline
 red_mod_2_smw <- update(red_mod_2_whw, newdata = mod_data,
-                        cores = 4, iter = 5000,
-                        control = list(adapt_delta = 0.95),
+                        cores = 4, iter = 4000,
+                        control = list(adapt_delta = 0.999),
                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_PH_N_HAB")
 
 summary(red_mod_2_smw)
@@ -2912,10 +2849,10 @@ pp_check(red_mod_2_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smw))
 
-red_mod_2_smw <- add_criterion(red_mod_2_smw, "loo",  moment_match = TRUE, 
-                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_PH_N_HAB")
+# red_mod_2_smw <- add_criterion(red_mod_2_smw, "loo",  moment_match = TRUE, 
+#                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_PH_N_HAB")
 
-loo_compare(full_mod_smw, red_mod_1_smw, red_mod_2_smw)
+# loo_compare(full_mod_smw, red_mod_1_smw, red_mod_2_smw)
 # elpd_diff se_diff
 # full_mod_smw     0.0       0.0 
 # red_mod_2_smw -172.5      19.8 
@@ -2929,8 +2866,8 @@ mod_data <- ELL_pH %>%
          Ell = SM_R_UW) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO, PH_SE = PH_DIW_SE,
-         ELL_SE = ELL_SM_UW_SE) %>%
+         N = NC_RATIO, PH_SE = PH_DIW_SE_NORM,
+         ELL_SE = ELL_SM_UW_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
@@ -2943,7 +2880,7 @@ mod_data <- ELL_pH %>%
 # Habitat interaction
 # run model - small unweighted Ell R
 full_mod_smuw <- update(full_mod_whw, newdata = mod_data,
-                        cores = 4, iter = 5000,
+                        cores = 4, iter = 4000,
                         control = list(adapt_delta = 0.95),
                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_spl_N_HAB")
 
@@ -2955,12 +2892,12 @@ pp_check(full_mod_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_smuw))
 
-full_mod_smuw <- add_criterion(full_mod_smuw, "loo",  moment_match = TRUE, 
-                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_spl_N_HAB")
+# full_mod_smuw <- add_criterion(full_mod_smuw, "loo",  moment_match = TRUE, 
+#                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_spl_N_HAB")
 
 # No pH ~ N spline
 red_mod_1_smuw <- update(red_mod_1_whw, newdata = mod_data,
-                         cores = 4, iter = 5000,
+                         cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.99),
                          file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_N_HAB")
 
@@ -2972,12 +2909,12 @@ pp_check(red_mod_1_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_smuw))
 
-red_mod_1_smuw <- add_criterion(red_mod_1_smuw, "loo",  moment_match = TRUE, 
-                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_N_HAB")
+# red_mod_1_smuw <- add_criterion(red_mod_1_smuw, "loo",  moment_match = TRUE, 
+#                                 file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_N_HAB")
 # No Ell ~ N spline
 red_mod_2_smuw <- update(red_mod_2_whw, newdata = mod_data,
-                         cores = 4, iter = 5000,
-                         control = list(adapt_delta = 0.95),
+                         cores = 4, iter = 4000,
+                         control = list(adapt_delta = 0.999),
                          file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_PH_N_HAB")
 
 summary(red_mod_2_smuw)
@@ -2988,32 +2925,30 @@ pp_check(red_mod_2_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smuw))
 
-red_mod_2_smuw <- add_criterion(red_mod_2_smuw, "loo",  moment_match = TRUE, 
-                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_PH_N_HAB")
+# red_mod_2_smuw <- add_criterion(red_mod_2_smuw, "loo",  moment_match = TRUE, 
+#                                 file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_PH_N_HAB")
 
-loo_compare(full_mod_smuw, red_mod_1_smuw, red_mod_2_smuw)
+# loo_compare(full_mod_smuw, red_mod_1_smuw, red_mod_2_smuw)
 # elpd_diff se_diff
 # full_mod_smuw     0.0       0.0 
 # red_mod_2_smuw -168.8      20.0 
 # red_mod_1_smuw -174.8      19.4
 
 # ~~ kfold criteria ####
-options(mc.cores = 5)
+library(future)
+plan(multisession)
 options(future.globals.maxSize= 891289600)
 # whole weighted
 full_mod_whw <- add_criterion(full_mod_whw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                              chains = 1, cores = 5,
                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_N_HAB")
 
 red_mod_1_whw <- add_criterion(red_mod_1_whw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                               chains = 1, cores = 5,
                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_N_HAB")
 
-red_mod_2_whw <- add_criterion(red_mod_2_whw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                               chains = 1, cores = 5,
-                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_PH_N_HAB")
+# red_mod_2_whw <- add_criterion(red_mod_2_whw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
+#                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_PH_N_HAB")
 
-loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw, criterion = "kfold")
+# loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw, criterion = "kfold")
 # elpd_diff se_diff
 # full_mod_whw    0.0       0.0  
 # red_mod_1_whw -66.7      23.1  
@@ -3021,15 +2956,12 @@ loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw, criterion = "kfold")
 
 # whole unweighted
 full_mod_whuw <- add_criterion(full_mod_whuw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                               chains = 1, cores = 5,
                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_spl_N_HAB")
 
 red_mod_1_whuw <- add_criterion(red_mod_1_whuw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                                chains = 1, cores = 5,
                                 file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_N_HAB")
 
 red_mod_2_whuw <- add_criterion(red_mod_2_whuw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                                chains = 1, cores = 5,
                                 file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_PH_N_HAB")
 
 loo_compare(full_mod_whuw, red_mod_1_whuw, red_mod_2_whuw, criterion = "kfold")
@@ -3038,15 +2970,12 @@ loo_compare(full_mod_whuw, red_mod_1_whuw, red_mod_2_whuw, criterion = "kfold")
 
 # small weighted
 full_mod_smw <- add_criterion(full_mod_smw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                              chains = 1, cores = 5,
                               file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_spl_N_HAB")
 
 red_mod_1_smw <- add_criterion(red_mod_1_smw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                               chains = 1, cores = 5,
                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_N_HAB")
 
 red_mod_2_smw <- add_criterion(red_mod_2_smw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                               chains = 1, cores = 5,
                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_PH_N_HAB")
 
 loo_compare(full_mod_smw, red_mod_1_smw, red_mod_2_smw, criterion = "kfold")
@@ -3054,16 +2983,13 @@ loo_compare(full_mod_smw, red_mod_1_smw, red_mod_2_smw, criterion = "kfold")
 
 # small unweighted
 full_mod_smuw <- add_criterion(full_mod_smuw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                               chains = 1, cores = 5,
                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_spl_N_HAB")
 
 red_mod_1_smuw <- add_criterion(red_mod_1_smuw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                                chains = 1, cores = 5,
                                 file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_N_HAB")
 
-red_mod_2_smuw <- add_criterion(red_mod_2_smuw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
-                                chains = 1, cores = 5,
-                                file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_PH_N_HAB")
+# red_mod_2_smuw <- add_criterion(red_mod_2_smuw, "kfold",  K = 10, folds = "grouped", group = "REP_ID",
+#                                 file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_PH_N_HAB")
 
 loo_compare(full_mod_smuw, red_mod_1_smuw, red_mod_2_smuw, criterion = "kfold")
 
