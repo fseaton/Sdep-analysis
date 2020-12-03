@@ -302,7 +302,7 @@ mod_pr <- c(prior(normal(0,0.5), class = "b"),
 sm_r_w_hab_mod <- brm(ELL ~ YR*Management + (1|SERIES_NUM) +
                         ar(time = YRnm, gr = REP_ID), prior = mod_pr,
                       data = mod_data, cores = 4, iter = 4000,
-                      file = paste0("Outputs/Models/Year_models/SM_R_W_HAB-brms-", Sys.Date()))
+                      file = "Outputs/Models/Year_models/SM_R_W_HAB")
 summary(sm_r_w_hab_mod)
 plot(sm_r_w_hab_mod)
 pp_check(sm_r_w_hab_mod)
@@ -327,7 +327,7 @@ mod_data <- mutate(Comb,
   na.omit()
 
 sm_r_uw_hab_mod <- update(sm_r_w_hab_mod, newdata = mod_data, cores = 4, iter = 4000,
-                          file = paste0("Outputs/Models/Year_models/SM_R_UW_HAB-brms",Sys.Date()))
+                          file = "Outputs/Models/Year_models/SM_R_UW_HAB")
 summary(sm_r_uw_hab_mod)
 plot(sm_r_uw_hab_mod)
 pp_check(sm_r_uw_hab_mod)
@@ -352,7 +352,7 @@ mod_data <- mutate(Comb,
   na.omit()
 
 wh_r_uw_hab_mod <- update(sm_r_w_hab_mod, newdata = mod_data, cores = 4, iter = 4000,
-                          file = paste0("Outputs/Models/Year_models/WH_R_UW_HAB-brms",Sys.Date()))
+                          file = "Outputs/Models/Year_models/WH_R_UW_HAB")
 summary(wh_r_uw_hab_mod)
 plot(wh_r_uw_hab_mod)
 pp_check(wh_r_uw_hab_mod)
@@ -376,7 +376,7 @@ mod_data <- mutate(Comb,
   na.omit()
 
 wh_r_w_hab_mod <- update(sm_r_w_hab_mod, newdata = mod_data, cores = 4, iter = 4000,
-                         file = paste0("Outputs/Models/Year_models/WH_R_W_HAB-brms",Sys.Date()))
+                         file = "Outputs/Models/Year_models/WH_R_W_HAB")
 summary(wh_r_w_hab_mod)
 plot(wh_r_w_hab_mod)
 pp_check(wh_r_w_hab_mod)
@@ -468,7 +468,7 @@ mod_pr <- c(prior(normal(0,0.5), class = "b"),
 sm_r_w_hab_me_mod <- brm(ELL | mi(ELL_SE) ~ YR*Management + (1|SERIES_NUM) +
                            ar(time = YRnm, gr = REP_ID), prior = mod_pr,
                          data = mod_data, cores = 4, iter = 6000,
-                         file = paste0("Outputs/Models/Year_models/SM_R_W_HAB_me-brms-", Sys.Date()))
+                         file = "Outputs/Models/Year_models/SM_R_W_HAB_me")
 summary(sm_r_w_hab_me_mod)
 plot(sm_r_w_hab_me_mod, ask = FALSE)
 pp_check(sm_r_w_hab_me_mod)
@@ -490,7 +490,7 @@ mod_data <- mutate(Comb,
 
 sm_r_uw_hab_me_mod <- update(sm_r_w_hab_me_mod, newdata = mod_data, 
                              cores = 4, iter = 6000,
-                             file = paste0("Outputs/Models/Year_models/SM_R_UW_HAB_me-brms",Sys.Date()))
+                             file = "Outputs/Models/Year_models/SM_R_UW_HAB_me")
 summary(sm_r_uw_hab_me_mod)
 plot(sm_r_uw_hab_me_mod, ask = FALSE)
 pp_check(sm_r_uw_hab_me_mod)
@@ -512,18 +512,18 @@ mod_data <- mutate(Comb,
 
 wh_r_uw_hab_me_mod <- update(sm_r_w_hab_me_mod, newdata = mod_data, 
                              cores = 4, iter = 6000,
-                             file = paste0("Outputs/Models/Year_models/WH_R_UW_HAB_me-brms",Sys.Date()))
+                             file = "Outputs/Models/Year_models/WH_R_UW_HAB_me")
 summary(wh_r_uw_hab_me_mod)
 plot(wh_r_uw_hab_me_mod, ask = FALSE)
 pp_check(wh_r_uw_hab_me_mod)
 pp_check(wh_r_uw_hab_me_mod, type = "stat_2d")
 plot(conditional_effects(wh_r_uw_hab_me_mod), ask = FALSE)
 
-# unweighted 200m2 plot
+# weighted 200m2 plot
 mod_data <- mutate(Comb, 
                    SERIES_NUM = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
                    ELL = WH_R_W,
-                   ELL_SE = WH_R_SE_NORM,
+                   ELL_SE = WH_W_SE_NORM,
                    YR = as.factor(Year)) %>%
   ungroup() %>%
   mutate(YRnm = as.integer(YR),
@@ -533,7 +533,7 @@ mod_data <- mutate(Comb,
 
 wh_r_w_hab_me_mod <- update(sm_r_w_hab_me_mod, newdata = mod_data, 
                             cores = 4, iter = 6000,
-                            file = paste0("Outputs/Models/Year_models/WH_R_W_HAB_me-brms",Sys.Date()))
+                            file = "Outputs/Models/Year_models/WH_R_W_HAB_me")
 summary(wh_r_w_hab_me_mod)
 plot(wh_r_w_hab_me_mod, ask = FALSE)
 pp_check(wh_r_w_hab_me_mod)
@@ -542,7 +542,7 @@ plot(conditional_effects(wh_r_w_hab_me_mod), ask = FALSE)
 
 
 # nice conditional effect plots
-wh_w <- wh_r_w_hab_mod %>%
+wh_w <- wh_r_w_hab_me_mod %>%
   emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
   mutate(Year = as.numeric(as.character(YR))) %>%
@@ -551,7 +551,7 @@ wh_w <- wh_r_w_hab_mod %>%
   stat_lineribbon(alpha = 1/4) +
   scale_y_continuous(limits = c(4,6))+
   labs(y = bquote("Cover weighted Ellenberg R 200m"^2))
-wh_uw <- wh_r_uw_hab_mod %>%
+wh_uw <- wh_r_uw_hab_me_mod %>%
   emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
   mutate(Year = as.numeric(as.character(YR))) %>%
@@ -560,7 +560,7 @@ wh_uw <- wh_r_uw_hab_mod %>%
   stat_lineribbon(alpha = 1/4) +
   scale_y_continuous(limits = c(4,6)) +
   labs(y = bquote("Unweighted Ellenberg R 200m"^2))
-sm_w <- sm_r_w_hab_mod %>%
+sm_w <- sm_r_w_hab_me_mod %>%
   emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
   mutate(Year = as.numeric(as.character(YR))) %>%
@@ -569,7 +569,7 @@ sm_w <- sm_r_w_hab_mod %>%
   stat_lineribbon(alpha = 1/4) +
   scale_y_continuous(limits = c(4,6)) +
   labs(y = bquote("Cover weighted Ellenberg R 4m"^2))
-sm_uw <- sm_r_uw_hab_mod %>%
+sm_uw <- sm_r_uw_hab_me_mod %>%
   emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
   mutate(Year = as.numeric(as.character(YR))) %>%
@@ -580,8 +580,8 @@ sm_uw <- sm_r_uw_hab_mod %>%
   labs(y = bquote("Unweighted Ellenberg R 4m"^2))
 
 wh_w + wh_uw + sm_w + sm_uw + plot_layout(guides = "collect")
-ggsave("Ellenberg R versus time by Management with measurement error variable y limits.png",
-       path = "Temp/", width = 30, height = 30, units = "cm")
+ggsave("Ellenberg R versus time by Management with measurement error.png",
+       path = "Outputs/Models/Year_models/", width = 20, height = 15, units = "cm")
 
 # pH models ####
 mod_data <- mutate(Comb, 
@@ -607,31 +607,25 @@ mod_pr <- c(prior(normal(0,0.5), class = "b"),
 ph_hab_mod <- brm(PH ~ YR*Management + (1|SERIES_NUM) +
                     ar(time = YRnm, gr = REP_ID), prior = mod_pr,
                   data = mod_data, cores = 4, iter = 4000,
-                  file = paste0("Outputs/Models/Year_models/PH_hab-brms-", Sys.Date()))
+                  file = "Outputs/Models/Year_models/PH_hab")
 summary(ph_hab_mod)
 plot(ph_hab_mod)
 pp_check(ph_hab_mod)
 pp_check(ph_hab_mod, type = "stat_2d")
-pr <- predict(ph_hab_mod, summary = FALSE)
-str(pr)
-bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$PH)), pr,
-                            group = as.character(
-                              as.data.frame(mod_data)[!is.na(mod_data$PH),"YR"]))
 plot(conditional_effects(ph_hab_mod), ask = FALSE)
 
 ph_pl <- ph_hab_mod %>%
   emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
-  filter(Management != "Other") %>%
-  mutate(Year = as.numeric(as.character(YR)),
-         Management = recode(Management, "Management" = "Other")) %>%
-  ggplot(aes(x = Year, y = .value)) +
-  stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
-  facet_wrap(~Management) +
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value,
+             fill = Management, colour = Management)) +
+  stat_lineribbon(alpha = 1/4) +
   labs(y = "pH")
 ph_pl
-ggsave("pH versus time by Management.png", path = "Outputs/Models/Year_models/",
-       width = 20, height = 18, units = "cm")
+ggsave("pH versus time by Management.png", 
+       path = "Outputs/Models/Year_models/",
+       width = 12, height = 8, units = "cm")
 
 # pH in CaCl2
 mod_data <- mutate(Comb, 
@@ -646,16 +640,11 @@ mod_data <- mutate(Comb,
   na.omit() %>% droplevels()
 
 ph_c_hab_mod <- update(ph_hab_mod, newdata = mod_data, cores = 4, iter = 4000,
-                       file = paste0("Outputs/Models/Year_models/PH_C_HAB-brms",Sys.Date()))
+                       file = "Outputs/Models/Year_models/PH_C_HAB")
 summary(ph_c_hab_mod)
 plot(ph_c_hab_mod)
 pp_check(ph_c_hab_mod)
 pp_check(ph_c_hab_mod, type = "stat_2d")
-pr <- predict(ph_c_hab_mod, summary = FALSE)
-str(pr)
-bayesplot::ppc_stat_grouped(as.vector(na.omit(mod_data$PH)), pr,
-                            group = as.character(
-                              as.data.frame(mod_data)[!is.na(mod_data$PH),"YR"]))
 plot(conditional_effects(ph_c_hab_mod), ask = FALSE)
 
 # pH w/meas error ####
@@ -689,7 +678,7 @@ mod_pr <- c(prior(normal(0,0.5), class = "b"),
 ph_hab_me_mod <- brm(PH | mi(PH_SE) ~ YR*Management + (1|SERIES_NUM) +
                        ar(time = YRnm, gr = REP_ID), prior = mod_pr,
                      data = mod_data, cores = 4, iter = 4000,
-                     file = paste0("Outputs/Models/Year_models/PH_hab_me-brms-", Sys.Date()))
+                     file = "Outputs/Models/Year_models/PH_hab_me")
 summary(ph_hab_me_mod)
 plot(ph_hab_me_mod)
 pp_check(ph_hab_me_mod)
@@ -699,12 +688,10 @@ plot(conditional_effects(ph_hab_me_mod), ask = FALSE)
 ph_pl <- ph_hab_me_mod %>%
   emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
-  filter(Management != "Other") %>%
-  mutate(Year = as.numeric(as.character(YR)),
-         Management = recode(Management, "Management" = "Other")) %>%
-  ggplot(aes(x = Year, y = .value)) +
-  stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
-  facet_wrap(~Management) +
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value,
+             fill = Management, colour = Management)) +
+  stat_lineribbon(alpha = 1/4) +
   labs(y = "pH (DIW)")
 
 # pH in CaCl2
@@ -717,11 +704,11 @@ mod_data <- mutate(Comb_PH_QA,
   ungroup() %>%
   mutate(YRnm = as.integer(YR),
          Management = replace_na(Management, "Other")) %>%
-  select(REP_ID, SERIES_NUM, YR, YRnm, PH, Management) %>%
+  select(REP_ID, SERIES_NUM, YR, YRnm, PH, PH_SE, Management) %>%
   na.omit() %>% droplevels()
 
 ph_c_hab_me_mod <- update(ph_hab_me_mod, newdata = mod_data, cores = 4, iter = 4000,
-                          file = paste0("Outputs/Models/Year_models/PH_C_HAB_me-brms",Sys.Date()))
+                          file = "Outputs/Models/Year_models/PH_C_HAB_me")
 summary(ph_c_hab_me_mod)
 plot(ph_c_hab_me_mod)
 pp_check(ph_c_hab_me_mod)
@@ -731,17 +718,16 @@ plot(conditional_effects(ph_c_hab_me_mod), ask = FALSE)
 phc_pl <- ph_c_hab_me_mod %>%
   emmeans( ~ YR | Management) %>%
   gather_emmeans_draws() %>%
-  filter(Management != "Other") %>%
-  mutate(Year = as.numeric(as.character(YR)),
-         Management = recode(Management, "Management" = "Other")) %>%
-  ggplot(aes(x = Year, y = .value)) +
-  stat_lineribbon(alpha = 1/4, fill = "#2F7ECE") +
-  facet_wrap(~Management) +
+  mutate(Year = as.numeric(as.character(YR))) %>%
+  ggplot(aes(x = Year, y = .value,
+             fill = Management, colour = Management)) +
+  stat_lineribbon(alpha = 1/4) +
   labs(y = bquote("pH CaCl"[2]))
-ph_pl + phc_pl
+ph_pl  + phc_pl + plot_layout(guides = "collect") &
+  scale_y_continuous(limits = c(4.2,6.2)) 
 ggsave("pH against year with measurement error.png",
        path = "Outputs/Models/Year_models/",
-       width = 20, height = 18, units = "cm")
+       width = 20, height = 12, units = "cm")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~ ####
 # pH against rainfall ####
