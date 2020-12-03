@@ -1331,6 +1331,7 @@ mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
             prior(normal(0,0.5), class = "b", resp = "PH"),
             prior(normal(0,0.5), class = "b", resp = "N"),
             prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
+            prior(student_t(3, 0, 2.5), class = "sds", resp = "PH"),
             prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
             prior(normal(0,0.25), class = "Intercept", resp = "PH"),
             prior(student_t(3,0,1), class = "Intercept", resp = "N"),
@@ -1364,10 +1365,11 @@ pp_check(prior_mod, nsamples = 50, resp = "N")
 plot(conditional_effects(prior_mod))
 
 # run model - full weighted Ell R
-full_mod_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
+full_mod_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N) + 
                          (1|SQUARE) +
                          ar(time = YRnm, gr = REP_ID)) +
-                      bf(PH  ~ Management*Sdep + fieldseason_rain  + s(Year1_pH, N, Management) +
+                      bf(PH  ~ Management*Sdep + fieldseason_rain  + 
+                           s(Year1_pH, N) +
                            (1|SQUARE) +
                            ar(time = YRnm, gr = REP_ID)) + 
                       bf(N ~ Ndep + (1|SQUARE) +
@@ -1401,7 +1403,7 @@ mod_pr_red1 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
 
-red_mod_1_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
+red_mod_1_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N) + 
                           (1|SQUARE) +
                           ar(time = YRnm, gr = REP_ID),
                         family = "student") +
@@ -1455,6 +1457,12 @@ pp_check(red_mod_2_whw, nsamples = 50, resp = "PH")
 pp_check(red_mod_2_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whw))
+
+# loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw, criterion = "kfold")
+# elpd_diff se_diff
+# red_mod_1_whw    0.0       0.0 
+# full_mod_whw   -79.5      32.8 
+# red_mod_2_whw -166.9      31.0 
 
 
 # ~~~ 200m2 unweighted ####
@@ -1518,7 +1526,12 @@ pp_check(red_mod_2_whuw, nsamples = 50, resp = "PH")
 pp_check(red_mod_2_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whuw))
-
+# loo_compare(full_mod_whuw, red_mod_1_whuw, red_mod_2_whuw,
+#             criterion = "kfold")
+# elpd_diff se_diff
+# red_mod_1_whuw    0.0       0.0 
+# red_mod_2_whuw -192.3      44.6 
+# full_mod_whuw  -289.0      44.4
 
 # ~~~ 4m2 weighted ####
 mod_data <- ELL_pH %>%
@@ -1581,7 +1594,12 @@ pp_check(red_mod_2_smw, nsamples = 50, resp = "PH")
 pp_check(red_mod_2_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smw))
-
+# loo_compare(full_mod_smw, red_mod_1_smw, red_mod_2_smw,
+#             criterion = "kfold")
+# elpd_diff se_diff
+# red_mod_1_smw    0.0       0.0 
+# red_mod_2_smw -169.6      28.8 
+# full_mod_smw  -170.4      34.1
 
 # ~~~ 4m2 unweighted ####
 mod_data <- ELL_pH %>%
@@ -1601,151 +1619,151 @@ mod_data <- ELL_pH %>%
   na.omit()
 
 # test model with different time periods
-mod_pr_time <- c(prior(normal(0,0.5), class = "b"),
-                 prior(student_t(3, 0, 2.5), class = "sds"),
-                 prior(normal(0,0.25), class = "Intercept"),
-                 prior(gamma(4,1), class = "nu"),
-                 prior(student_t(3,0,0.5), class = "sd"),
-                 prior(student_t(3,0,0.5), class = "sigma"))
-
-test_mod_yr1 <- brm(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
-                      (1|SQUARE),family = "student", 
-                    data = filter(mod_data, YRnm == 1), 
-                    prior = mod_pr_time,
-                    save_pars = save_pars(all = TRUE), 
-                    cores = 4, iter = 5000,
-                    control = list(adapt_delta = 0.99))
-summary(test_mod_yr1)
-
-test_mod_yr2 <- update(test_mod_yr1, 
-                       newdata = filter(mod_data, YRnm == 2), 
-                       save_pars = save_pars(all = TRUE), 
-                       cores = 4, iter = 5000,
-                       control = list(adapt_delta = 0.99))
-summary(test_mod_yr2)
-
-test_mod_yr3 <- update(test_mod_yr1, 
-                       newdata = filter(mod_data, YRnm == 3), 
-                       save_pars = save_pars(all = TRUE), 
-                       cores = 4, iter = 5000,
-                       control = list(adapt_delta = 0.99))
-summary(test_mod_yr3)
-plot(conditional_effects(test_mod_yr3, 
-                         conditions = data.frame(cond__ = c("Management = 1","Management = 0"))))
-
-nd <- 
-  tibble(Year1_pH = seq(from = -2.25, to = 3.6, length.out = 30) %>% 
-           rep(., times = 6),
-         N = rep(c(-1,0,1), each = 30) %>% 
-           rep(., times = 2),
-         Management = rep(0:1, each = 90),
-         PH = 0,
-         REP_ID = 1:180)
-
-f <- do.call(rbind, list(
-  fitted(test_mod_yr1, newdata = nd, re_formula = NA) %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Time_period = "7898"),
-  fitted(test_mod_yr3, newdata = nd, re_formula = NA) %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Time_period = "9807"),
-  fitted(test_mod_yr3, newdata = nd, re_formula = NA) %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Time_period = "0719")
-)) %>%
-  mutate(Time_period = forcats::fct_relevel(
-    as.factor(Time_period),"7898","9807","0719"))
-
-plot_dat <- ELL_pH %>% 
-  select(ELL = SM_R_UW,
-         PH,Management, REP_ID, Time_period,
-         Year1_pH, N = NC_RATIO) %>%
-  filter(!is.na(Management)) %>%
-  mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"))
-
-plot_dat %>%
-  mutate(N = cut(scale(N), c(-10,-0.5,0.5,10), labels = c("-1","0","1")),
-         Year1_pH = scale(Year1_pH),
-         Time_period = as.factor(Time_period)) %>%
-  mutate(Time_period = forcats::fct_relevel(Time_period,"7898","9807","0719")) %>%
-  filter(!is.na(N)) %>%
-  ggplot() +
-  geom_point(aes(x = Year1_pH, y = ELL, colour = N),
-             alpha = 0.5) +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, N = as.character(N)),
-              aes(x = Year1_pH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = N, color = N,
-                  group = N),
-              stat = "identity", 
-              alpha = 1/3, size = 1/2) +
-  facet_grid(Time_period~Management) +
-  labs(x = "Initial pH", y = "Ellenberg R change") +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_colour_viridis_d(option="plasma", end = 0.9) +
-  scale_fill_viridis_d(option="plasma", end = 0.9)
-ggsave("Initial pH and N effect on Ellenberg R over different time periods with data.png",
-       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
-
-nd <- 
-  tibble(PH = seq(from = -3, to = 3.5, length.out = 30) %>% 
-           rep(., times = 2),
-         N = 0,
-         Management = rep(0:1, each = 30),
-         Year1_pH = 0,
-         REP_ID = 1:60)
-
-f <- do.call(rbind, list(
-  fitted(test_mod_yr1, newdata = nd, re_formula = NA) %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Time_period = "7898"),
-  fitted(test_mod_yr3, newdata = nd, re_formula = NA) %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Time_period = "9807"),
-  fitted(test_mod_yr3, newdata = nd, re_formula = NA) %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Time_period = "0719")
-)) %>%
-  mutate(Time_period = forcats::fct_relevel(
-    as.factor(Time_period),"7898","9807","0719"))
-
-plot_dat %>%
-  mutate(Time_period = as.factor(Time_period)) %>%
-  mutate(Time_period = forcats::fct_relevel(Time_period,"7898","9807","0719")) %>%
-  filter(!is.na(N)) %>%
-  ggplot() +
-  geom_point(aes(x = PH, y = ELL, colour = Management),
-             alpha = 0.5) +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, N = as.character(N)),
-              aes(x = PH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = Management, color = Management,
-                  group = Management),
-              stat = "identity", 
-              alpha = 1/3, size = 1/2) +
-  facet_grid(~Time_period) +
-  labs(x = "Initial pH", y = "Ellenberg R change") +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_colour_viridis_d(option="plasma", end = 0.9) +
-  scale_fill_viridis_d(option="plasma", end = 0.9)
-ggsave("pH change on Ellenberg R over different time periods with data.png",
-       path = "Outputs/Models/Difference/Univariate_nomeaserror", 
-       width = 20, height = 12, units = "cm")
+# mod_pr_time <- c(prior(normal(0,0.5), class = "b"),
+#                  prior(student_t(3, 0, 2.5), class = "sds"),
+#                  prior(normal(0,0.25), class = "Intercept"),
+#                  prior(gamma(4,1), class = "nu"),
+#                  prior(student_t(3,0,0.5), class = "sd"),
+#                  prior(student_t(3,0,0.5), class = "sigma"))
+# 
+# test_mod_yr1 <- brm(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
+#                       (1|SQUARE),family = "student", 
+#                     data = filter(mod_data, YRnm == 1), 
+#                     prior = mod_pr_time,
+#                     save_pars = save_pars(all = TRUE), 
+#                     cores = 4, iter = 5000,
+#                     control = list(adapt_delta = 0.99))
+# summary(test_mod_yr1)
+# 
+# test_mod_yr2 <- update(test_mod_yr1, 
+#                        newdata = filter(mod_data, YRnm == 2), 
+#                        save_pars = save_pars(all = TRUE), 
+#                        cores = 4, iter = 5000,
+#                        control = list(adapt_delta = 0.99))
+# summary(test_mod_yr2)
+# 
+# test_mod_yr3 <- update(test_mod_yr1, 
+#                        newdata = filter(mod_data, YRnm == 3), 
+#                        save_pars = save_pars(all = TRUE), 
+#                        cores = 4, iter = 5000,
+#                        control = list(adapt_delta = 0.99))
+# summary(test_mod_yr3)
+# plot(conditional_effects(test_mod_yr3, 
+#                          conditions = data.frame(cond__ = c("Management = 1","Management = 0"))))
+# 
+# nd <- 
+#   tibble(Year1_pH = seq(from = -2.25, to = 3.6, length.out = 30) %>% 
+#            rep(., times = 6),
+#          N = rep(c(-1,0,1), each = 30) %>% 
+#            rep(., times = 2),
+#          Management = rep(0:1, each = 90),
+#          PH = 0,
+#          REP_ID = 1:180)
+# 
+# f <- do.call(rbind, list(
+#   fitted(test_mod_yr1, newdata = nd, re_formula = NA) %>%
+#     as_tibble() %>%
+#     bind_cols(nd) %>%
+#     mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+#            Time_period = "7898"),
+#   fitted(test_mod_yr3, newdata = nd, re_formula = NA) %>%
+#     as_tibble() %>%
+#     bind_cols(nd) %>%
+#     mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+#            Time_period = "9807"),
+#   fitted(test_mod_yr3, newdata = nd, re_formula = NA) %>%
+#     as_tibble() %>%
+#     bind_cols(nd) %>%
+#     mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+#            Time_period = "0719")
+# )) %>%
+#   mutate(Time_period = forcats::fct_relevel(
+#     as.factor(Time_period),"7898","9807","0719"))
+# 
+# plot_dat <- ELL_pH %>% 
+#   select(ELL = SM_R_UW,
+#          PH,Management, REP_ID, Time_period,
+#          Year1_pH, N = NC_RATIO) %>%
+#   filter(!is.na(Management)) %>%
+#   mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"))
+# 
+# plot_dat %>%
+#   mutate(N = cut(scale(N), c(-10,-0.5,0.5,10), labels = c("-1","0","1")),
+#          Year1_pH = scale(Year1_pH),
+#          Time_period = as.factor(Time_period)) %>%
+#   mutate(Time_period = forcats::fct_relevel(Time_period,"7898","9807","0719")) %>%
+#   filter(!is.na(N)) %>%
+#   ggplot() +
+#   geom_point(aes(x = Year1_pH, y = ELL, colour = N),
+#              alpha = 0.5) +
+#   geom_hline(yintercept = 0, colour = "gray") +
+#   geom_smooth(data = mutate(f, N = as.character(N)),
+#               aes(x = Year1_pH,
+#                   y = Estimate, ymin = Q2.5, ymax = Q97.5,
+#                   fill = N, color = N,
+#                   group = N),
+#               stat = "identity", 
+#               alpha = 1/3, size = 1/2) +
+#   facet_grid(Time_period~Management) +
+#   labs(x = "Initial pH", y = "Ellenberg R change") +
+#   scale_x_continuous(expand = c(0,0)) +
+#   scale_colour_viridis_d(option="plasma", end = 0.9) +
+#   scale_fill_viridis_d(option="plasma", end = 0.9)
+# ggsave("Initial pH and N effect on Ellenberg R over different time periods with data.png",
+#        path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+#        width = 16, height = 18, units = "cm")
+# 
+# nd <- 
+#   tibble(PH = seq(from = -3, to = 3.5, length.out = 30) %>% 
+#            rep(., times = 2),
+#          N = 0,
+#          Management = rep(0:1, each = 30),
+#          Year1_pH = 0,
+#          REP_ID = 1:60)
+# 
+# f <- do.call(rbind, list(
+#   fitted(test_mod_yr1, newdata = nd, re_formula = NA) %>%
+#     as_tibble() %>%
+#     bind_cols(nd) %>%
+#     mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+#            Time_period = "7898"),
+#   fitted(test_mod_yr3, newdata = nd, re_formula = NA) %>%
+#     as_tibble() %>%
+#     bind_cols(nd) %>%
+#     mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+#            Time_period = "9807"),
+#   fitted(test_mod_yr3, newdata = nd, re_formula = NA) %>%
+#     as_tibble() %>%
+#     bind_cols(nd) %>%
+#     mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+#            Time_period = "0719")
+# )) %>%
+#   mutate(Time_period = forcats::fct_relevel(
+#     as.factor(Time_period),"7898","9807","0719"))
+# 
+# plot_dat %>%
+#   mutate(Time_period = as.factor(Time_period)) %>%
+#   mutate(Time_period = forcats::fct_relevel(Time_period,"7898","9807","0719")) %>%
+#   filter(!is.na(N)) %>%
+#   ggplot() +
+#   geom_point(aes(x = PH, y = ELL, colour = Management),
+#              alpha = 0.5) +
+#   geom_hline(yintercept = 0, colour = "gray") +
+#   geom_smooth(data = mutate(f, N = as.character(N)),
+#               aes(x = PH,
+#                   y = Estimate, ymin = Q2.5, ymax = Q97.5,
+#                   fill = Management, color = Management,
+#                   group = Management),
+#               stat = "identity", 
+#               alpha = 1/3, size = 1/2) +
+#   facet_grid(~Time_period) +
+#   labs(x = "Initial pH", y = "Ellenberg R change") +
+#   scale_x_continuous(expand = c(0,0)) +
+#   scale_colour_viridis_d(option="plasma", end = 0.9) +
+#   scale_fill_viridis_d(option="plasma", end = 0.9)
+# ggsave("pH change on Ellenberg R over different time periods with data.png",
+#        path = "Outputs/Models/Difference/Univariate_nomeaserror", 
+#        width = 20, height = 12, units = "cm")
 
 
 # Multivariate with N as a 2D spline
@@ -1807,6 +1825,12 @@ pp_check(red_mod_2_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smuw))
 
+loo_compare(full_mod_smuw, red_mod_1_smuw, red_mod_2_smuw,
+            criterion = "kfold")
+# elpd_diff se_diff
+# red_mod_1_smuw    0.0       0.0 
+# red_mod_2_smuw -164.5      32.9 
+# full_mod_smuw  -275.2      35.1
 
 # ~~ kfold criteria ####
 options(mc.cores = 5)
