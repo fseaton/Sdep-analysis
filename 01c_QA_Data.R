@@ -88,10 +88,23 @@ X_Ell_QA <- full_join(X_Ell_QA_inner, X_Ell_QA_whole) %>%
   mutate(Diff = QA - CS)
 
 
-ggplot(X_Ell_QA, aes(x = CS, y = QA, colour = Year)) + 
+X_Ell_QA %>%
+  mutate(Year = as.factor(Year),
+         PlotSize = recode(PlotSize,
+                           "SM" = "Small",
+                           "WH" = "Full"),
+         Weighting = recode(Weighting,
+                            "UW" = "Unweighted",
+                            "W" = "Weighted")) %>%
+  ggplot(aes(x = CS, y = QA, colour = Year)) + 
   geom_point() +
   geom_abline(slope = 1, intercept = 0) +
-  facet_grid(PlotSize ~ Weighting)
+  facet_grid(Weighting ~ PlotSize) +
+  ggthemes::scale_colour_colorblind() +
+  coord_fixed() +
+  labs(x = "Original survey", y = "QA survey")
+ggsave("Ellenberg R QA comparison by plotsize and weighting.png",
+       path = "Outputs/Graphs/", width = 15, height = 12, units = "cm")
 
 ggplot(X_Ell_QA, aes(x = Diff)) + 
   geom_histogram() +

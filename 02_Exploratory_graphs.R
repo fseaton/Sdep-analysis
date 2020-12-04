@@ -435,54 +435,56 @@ hab <- full_join(hab07, hab98) %>% full_join(hab78) %>%
                            `8` = "Heath/bog"))
 
 # calculate total change in pH over survey years
-PH$change_dir <- rowSums(select(PH, diff7898, diff9807, diff0716, diff0719), na.rm = TRUE)
+PH$change_dir <- rowSums(select(PH, diff7898, diff9807, diff0719), na.rm = TRUE)
 summary(PH$change_dir)
 filter(PH,change_dir == 0) %>% select(starts_with("diff")) %>%
   summary()
 
 PH$change_dir <- ifelse(PH$change_dir == 0 & !is.na(PH$diff7807), PH$diff7807, PH$change_dir) 
-PH$change_dir <- ifelse(PH$change_dir == 0 & !is.na(PH$diff7816), PH$diff7816, PH$change_dir) 
+PH$change_dir <- ifelse(PH$change_dir == 0 & !is.na(PH$diff7819), PH$diff7819, PH$change_dir) 
 
 # Combine pH and AVC data and convert to long format
-PH_long_hab <- left_join(PH, select(hab, REP_ID, AVC = AVC_desc)) %>%
+PH_long_hab <- left_join(PH, select(BH_IMP, REP_ID, Management)) %>%
   droplevels() %>%
+  select(-starts_with("diff")) %>%
   pivot_longer(starts_with("PH"),
+               names_to = c("Variable","year"),
+               names_sep = "_",
                values_to = "pH",
                values_drop_na = TRUE) %>%
-  mutate(year = as.integer(substring(name, 3,6))) %>%
-  mutate(year = ifelse(year == 2000, 1998, year))
+  filter(!is.na(Management )) %>%
+  mutate(year = as.numeric(year))
 
 # plots of pH change over time
 PH_long_hab %>% 
-  filter(!is.na(AVC)) %>%
   ggplot(aes(x = year, y = pH, group = REP_ID)) +
   geom_line(alpha = 0.5, aes(colour = change_dir) )+
   geom_jitter(size = 0.2, width = 1, height = 0, shape = 16, alpha = 0.8,
               aes(colour = change_dir)) +
-  facet_wrap(~AVC, nrow = 2) + 
+  facet_wrap(~Management, nrow = 2) + 
   scale_colour_distiller(palette = "RdBu", direction = 1,
                          limits = c(-1,1)*max(abs(PH_long_hab$change_dir)),
                          name = "pH change", na.value = "white") +
   theme_dark()
-ggsave("pH change over time facetted by AVC.png", path = "Outputs/Graphs/",
-       width = 28, height = 12, units = "cm")
+ggsave("pH change over time facetted by Management.png", path = "Outputs/Graphs/",
+       width = 12, height = 12, units = "cm")
 
 PH_long_hab %>% 
-  filter(!is.na(AVC)) %>%
   ggplot(aes(x = year, y = pH)) +
   geom_line(alpha = 0.5, aes(colour = change_dir, group = REP_ID))+
-  geom_jitter(size = 0.2, width = 1, height = 0, shape = 16, alpha = 0.5,
+  geom_jitter(size = 0.2, width = 1, height = 0,
+              shape = 16, alpha = 0.1,
               colour = "grey50") +
   geom_boxplot(fill= NA, aes(group = year), outlier.shape = NA) +
-  facet_wrap(~AVC, nrow = 2) + 
+  facet_wrap(~Management, nrow = 2) + 
   # geom_smooth(formula = y ~ poly(x,3)) +
   scale_colour_distiller(palette = "RdBu", direction = 1,
                          limits = c(-1,1)*max(abs(PH_long_hab$change_dir)),
                          name = "pH change", na.value = "white") +
   # theme_dark() +
   NULL
-ggsave("pH change over time boxplots facetted by AVC.png", path = "Outputs/Graphs/",
-       width = 28, height = 15, units = "cm")
+ggsave("pH change over time boxplots facetted by management.png", path = "Outputs/Graphs/",
+       width = 12, height = 15, units = "cm")
 
 # combine ph difference and AVC data
 PH_diff_long <- left_join(PH_diff_long, 
@@ -598,6 +600,21 @@ phc_wide_diff %>% filter(!is.na(AVC)) %>%
 ggsave("pH change over time DIW vs CaCl2 scatterplots facet by AVC.png", 
        path = "Outputs/Graphs/",
        width = 28, height = 15, units = "cm")
+
+PH %>%
+  select(REP_ID, PHC_2007, PH_2007, PH_2019, PHC_2019) %>%
+  pivot_longer(starts_with("PH"), 
+               names_to = c("Variable","Year"),
+               names_sep = "_") %>%
+  na.omit() %>%
+  pivot_wider(names_from = "Variable",
+              values_from = "value") %>%
+  ggplot(aes(x = PH, y = PHC, colour = Year)) +
+  geom_point() + 
+  geom_abline(slope = 1, intercept = 0) +
+  coord_fixed() +
+  facet_wrap(~Year) +
+  labs(x = "pH (DIW)", y = bquote("pH CaCl"[2]))
 
 # Plant Ellenberg scores ####
 str(CS19_SP)
@@ -848,37 +865,29 @@ IBD_comb$PLOT_TYPE <- gsub("[^a-zA-Z]", "", IBD_comb$REP_ID07)
 summary(as.factor(IBD_comb$PLOT_TYPE))
 
 # Calculate difference in Ell R over the years
-ELL <- IBD_comb %>%
-  mutate(R16 = ifelse(!is.na(R16), R16, R18)) %>%
-  mutate(diff7898 = R98 - R78,
-         diff7807 = R07 - R78,
-         diff9807 = R07 - R98,
-         diff7816 = R16 - R78,
-         diff9816 = R16 - R98,
-         diff0716 = R16 - R07,
-         AVC_desc = recode(AVC,
-                           `1` = "Crops/Weeds",
-                           `2` = "Tall herb/grass",
-                           `3` = "Fertile grassland",
-                           `4` = "Infertile grassland",
-                           `5` = "Lowland wooded",
-                           `6` = "Upland wooded",
-                           `7` = "Moorland grass/mosaic",
-                           `8` = "Heath/bog")) 
+ELL <- X_Ell %>%
+  select(Year, REP_ID, contains("_R_")) %>%
+  pivot_longer(contains("_R_"), names_to = "Ellenberg") %>%
+  mutate(Year = as.character(Year)) %>%
+  pivot_wider(names_from = Year,
+              names_prefix = "R") %>%
+  mutate(diff7890 = R1990 - R1978,
+         diff9098 = R1998 - R1990,
+         diff9807 = R2007 - R1998,
+         diff0719 = R2019 - R2007
+  ) 
+  
+
 # Calculate overall Ell R change
-ELL$Rchange <- rowSums(select(ELL, diff7898, diff9807, diff0716), na.rm = TRUE)
+ELL$Rchange <- rowSums(select(ELL, diff7890, diff9098, 
+                              diff9807, diff0719), na.rm = TRUE)
 summary(ELL$Rchange)
 filter(ELL, Rchange == 0) %>% select(starts_with("diff")) %>%
   summary()
 
-ELL$Rchange <- ifelse(ELL$Rchange == 0 & !is.na(ELL$diff7807), ELL$diff7807, ELL$Rchange) 
-ELL$Rchange <- ifelse(ELL$Rchange == 0 & !is.na(ELL$diff9807), ELL$diff9807, ELL$Rchange) 
-ELL$Rchange <- ifelse(ELL$Rchange == 0 & !is.na(ELL$diff7898), ELL$diff7898, ELL$Rchange) 
-summary(ELL$Rchange)
-
 # Convert Ell R change into long format
 ELL_diff_long <- ELL %>%
-  select(REP_ID = REP_ID07, AVC = AVC_desc, starts_with("diff")) %>%
+  select(REP_ID, starts_with("diff")) %>%
   droplevels %>%
   pivot_longer(starts_with("diff"), values_to = "Ell_R") %>%
   filter(!is.na(Ell_R))
@@ -909,25 +918,67 @@ str(ELL_R_LONG)
 summary(ELL_R_LONG$AVC)
 
 # Ellenberg R score change over time boxplot/scatter/line graph
-ELL_R_LONG %>%
-  filter(!is.na(AVC)) %>%
+ELL %>%
+  select(-starts_with("diff")) %>%
+  pivot_longer(R1978:R2019,
+               names_to = "year",
+               names_prefix = "R",
+               names_transform = list(year = as.integer)) %>%
+  left_join(BH_IMP) %>%
+  filter(!is.na(Management)) %>%
+  mutate(Management = recode(Management,
+                             "High" = "High intensity",
+                             "Low" = "Low intensity"),
+         Ellenberg = recode(Ellenberg,
+                            "SM_R_UW" = "Small unweighted",
+                            "SM_R_W" = "Small weighted",
+                            "WH_R_UW" = "Full unweighted",
+                            "WH_R_W"= "Full weighted")) %>%
   ggplot(aes(x = year, y = value)) +
   geom_line(alpha = 0.5, aes(group = REP_ID, colour = Rchange))+
-  geom_jitter(size = 0.2, width = 1, height = 0, shape = 16, alpha = 0.5,
+  geom_jitter(size = 0.2, width = 1, height = 0, 
+              shape = 16, alpha = 0.1,
               colour = "grey50") +
   geom_boxplot(fill= NA, aes(group = year), outlier.shape = NA, width = 3) +
-  facet_wrap(~AVC, nrow = 2) + 
+  facet_grid(Ellenberg~Management) + 
   labs(y = "Ellenberg R") +
   # geom_smooth(formula = y ~ poly(x,3)) +
   scale_colour_distiller(palette = "RdBu", direction = 1,
-                         limits = c(-1,1)*max(abs(PH_long_hab$change_dir)),
+                         limits = c(-1,1)*max(abs(ELL$Rchange)),
                          name = "Ell R change", na.value = "white") +
   # theme_dark() +
   NULL
-ggsave("Ellenberg R change over time X plots boxplots facetted by AVC.png",
-       path = "Outputs/Graphs/", width = 28, height = 20, units = "cm")
+ggsave("Ellenberg R change over time X plots boxplots facetted by Management.png",
+       path = "Outputs/Graphs/", width = 15, height = 20, units = "cm")
 
+str(X_Ell)
+str(BH_IMP)
 
+plot_dat <- left_join(X_Ell, BH_IMP) %>%
+  filter(!is.na(Management)) %>%
+  select(REP_ID, Year, contains("_R_"), Management) %>%
+  pivot_longer(contains("_R_"), 
+               names_to = c("PlotSize","Score","Weighting"),
+               names_sep = "_") %>%
+  mutate(PlotSize = recode(PlotSize,
+                           "SM" = "Small",
+                           "WH" = "Full"),
+         Weighting = recode(Weighting,
+                            "UW" = "Unweighted",
+                            "W" = "Weighted"),
+         Management = recode(Management,
+                             "High" = "High intensity management",
+                             "Low" = "Low intensity management")) %>%
+  pivot_wider(names_from = PlotSize,
+              values_from = value)
+ggplot(plot_dat, aes(x = Full, y = Small)) + 
+  geom_point(alpha = 0.25, colour = "dodgerblue3") + 
+  geom_abline(slope = 1, intercept = 0) +
+  coord_fixed() + 
+  facet_grid(Management~Weighting) +
+  labs(x = "Full size plot",  y = "Smaller size plot")
+ggsave("Ellenberg R plot size comparison by weighting and management.png",
+       path = "Outputs/Graphs/", width = 12, height = 12, units ="cm")
 
 # Combined pH and ellenberg R ####
 # change graphs - combine difference stats
