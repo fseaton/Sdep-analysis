@@ -2884,7 +2884,7 @@ ggsave("Ndep effect on NC full model with data.png",
 
 
 # ** Measurement error ####
-# Multivariate with N as a 2D spline
+# Multivariate with Ndep as a 2D spline
 mod_data <- ELL_pH %>%
   filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
@@ -2892,62 +2892,90 @@ mod_data <- ELL_pH %>%
          Ell = WH_R_W) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO, ELL_SE = ELL_WH_W_SE_NORM, 
-         PH_SE = PH_DIW_SE_NORM) %>%
+         ELL_SE = ELL_WH_W_SE_NORM, 
+         PH_SE = PH_DIW_SE_NORM,
+         N = NC_RATIO) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
-         Ndep = as.numeric(scale(Ndep)), 
+         Ndep = as.numeric(scale(Ndep)),
+         N = as.numeric(scale(N)),
          Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
-         N = as.numeric(scale(N)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
 
 
 # Habitat interaction
-get_prior(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, N, Management) + 
-               (1|SQUARE) +
-               ar(time = YRnm, gr = REP_ID),
-             family = "student") +
-            bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain + s(Year1_pH, N, Management) +
-                 (1|SQUARE) + ar(time = YRnm, gr = REP_ID), family = "student") + 
-            bf(N ~ Ndep + (1|SQUARE) +
-                 ar(time = YRnm, gr = REP_ID)) +
+get_prior(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, Ndep, Management) + 
+               (1|p|SQUARE) +
+               ar(time = YRnm, gr = REP_ID)) +
+            bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain + s(Year1_pH, Ndep, Management) +
+                 (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) + 
             set_rescor(FALSE), data = mod_data)
 
 
 mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
             prior(normal(0,0.5), class = "b", resp = "PH"),
-            prior(normal(0,0.5), class = "b", resp = "N"),
             prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
             prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
             prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-            prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-            prior(gamma(4,1), class = "nu", resp = "Ell"),
-            prior(gamma(4,1), class = "nu", resp = "PH"),
             prior(normal(0,0.2), class = "ar", resp = "Ell"),
             prior(normal(0,0.2), class = "ar", resp = "PH"),
-            prior(normal(0,0.2), class = "ar", resp = "N"),
             prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
             prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
-            prior(student_t(3,0,0.5), class = "sd", resp = "N"),
             prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
             prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
-            prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
+            prior(lkj(5), class = "cor"))
+
+mod_data_low <- filter(mod_data, Management == 0)
+mod_pr_test <- c(prior(normal(0,0.5), class = "b"),
+            prior(student_t(3, 0, 2.5), class = "sds"),
+            prior(normal(0,0.25), class = "Intercept"),
+            prior(normal(0,0.2), class = "ar"),
+            prior(student_t(3,0,0.5), class = "sd"),
+            prior(student_t(3,0,0.5), class = "sigma"))
+ph_test_mod <- brm(PH|mi(PH_SE) ~ fieldseason_rain + s(Year1_pH, Ndep, Sdep) + 
+                     ar(time = YRnm, gr = REP_ID) + (1|SQUARE), 
+                   data = mod_data_low, prior = mod_pr_test, 
+                   cores = 4, iter = 4000, 
+                   save_pars = save_pars(all = TRUE, latent = TRUE),
+                   control = list(adapt_delta = 0.95))
+
+ph_test_mod2 <- brm(PH|mi(PH_SE) ~ fieldseason_rain + Sdep + s(Year1_pH, Ndep) + 
+                      ar(time = YRnm, gr = REP_ID) + (1|SQUARE), 
+                    data = mod_data_low, prior = mod_pr_test, 
+                    cores = 4, iter = 4000, 
+                    save_pars = save_pars(all = TRUE, latent = TRUE))
+ph_test_mod3 <- brm(PH|mi(PH_SE) ~ fieldseason_rain + Sdep + s(Year1_pH, N) + 
+                      ar(time = YRnm, gr = REP_ID) + (1|SQUARE), 
+                    data = mod_data_low, prior = mod_pr_test, 
+                    cores = 4, iter = 4000, 
+                    save_pars = save_pars(all = TRUE, latent = TRUE))
+
+
+ell_test_mod2 <- brm(Ell|mi(ELL_SE) ~ fieldseason_rain + Sdep + s(Year1_pH, Ndep) + 
+                       ar(time = YRnm, gr = REP_ID) + (1|SQUARE), 
+                     data = mod_data_low, prior = mod_pr_test, 
+                     cores = 4, iter = 4000, 
+                     save_pars = save_pars(all = TRUE, latent = TRUE),
+                     control = list(adapt_delta = 0.95))
+ell_test_mod3 <- brm(Ell|mi(ELL_SE) ~ fieldseason_rain + Sdep + s(Year1_pH, N) + 
+                       ar(time = YRnm, gr = REP_ID) + (1|SQUARE), 
+                     data = mod_data_low, prior = mod_pr_test, 
+                     cores = 4, iter = 4000, 
+                     save_pars = save_pars(all = TRUE, latent = TRUE))
 
 
 # prior simulation
-prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, N, Management) + 
-                      (1|SQUARE) +
-                      ar(time = YRnm, gr = REP_ID),
-                    family = "student") +
-                   bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain + (1|SQUARE) +
-                        ar(time = YRnm, gr = REP_ID), family = "student") + 
-                   bf(N ~ Ndep + (1|SQUARE) +
-                        ar(time = YRnm, gr = REP_ID))  +
-                   set_rescor(FALSE), data = mod_data, prior = mod_pr,
+prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, Ndep, Management) + 
+                      (1|p|SQUARE) +
+                      ar(time = YRnm, gr = REP_ID)) +
+                   bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain + (1|p|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID)) + 
+                    set_rescor(FALSE), data = mod_data, prior = mod_pr,
                  sample_prior = "only", save_pars = save_pars(all = TRUE, latent = TRUE), 
                  cores = 4, iter = 5000)
 summary(prior_mod)
+plot(prior_mod)
 pp_check(prior_mod, nsamples = 50, resp = "Ell")
 pp_check(prior_mod, nsamples = 50, resp = "PH")
 pp_check(prior_mod, nsamples = 50, resp = "N") 
@@ -2955,13 +2983,12 @@ plot(conditional_effects(prior_mod))
 
 # simulate data according to model and check if works 
 set.seed(151020)
+sq_devs <- rnorm(100,0,0.2)
 sim_data <- data.frame(SQUARE = gl(100,5)) %>%
   mutate(REP_ID = paste0(SQUARE,"X",1:500),    
          Improved = rbinom(500,1,0.007*as.numeric(SQUARE))) %>%
-  mutate(pH = rnorm(500,mean = 4.5 + Improved + rep(rnorm(100,0,0.5),each = 5), 1)) %>%
-  mutate(Ell = rnorm(500, mean = pH + rep(rnorm(100,0,1),each = 5), 1)) %>%
-  mutate(logC_year1 = rnorm(500, rep(rnorm(100,0,0.2),each = 5), 1)) %>%
-  mutate(logN_year1 = rnorm(500, logC_year1, 0.02)) %>%
+  mutate(pH = rnorm(500,mean = 4.5 + Improved + rep(rnorm(100,sq_devs,0.2),each = 5), 1)) %>%
+  mutate(Ell = rnorm(500, mean = pH + rep(rnorm(100,sq_devs,0.3),each = 5), 1)) %>%
   mutate(Sdep = rep(rnorm(100,0,1),each = 5)) %>%
   mutate(Ndep = rep(rnorm(100,-Sdep,1),each = 5)) %>%
   mutate(rain_year2 = rep(rnorm(100,0,1),each = 5),
@@ -2974,13 +3001,11 @@ sim_data <- data.frame(SQUARE = gl(100,5)) %>%
   mutate(Ell_diffYear2 = rstudent_t(500, 4,
                                     pH_diffYear2*(1-Improved) + 
                                       Improved*0.5*pH_diffYear2 + 
-                                      (pH>5.5)*-0.5*logN_year1,EllSE_year1)) %>%
+                                      (pH>5.5)*-0.5*Ndep,EllSE_year1)) %>%
   mutate(pH_year2 = pH + pH_diffYear2,
          pHSE_year2 = 0.15,
          Ell_year2 = Ell + Ell_diffYear2,
          EllSE_year2 = 0.2 + Improved*0.05,
-         logN_year2 = logN_year1 + rnorm(500,0.5*(2+Ndep),0.2),
-         logC_year2 = logC_year1 + rnorm(500,0,0.2),
          rain_year3 = rep(rnorm(100,0,1),each = 5)) %>%
   mutate(pH_diffYear3 = rstudent_t(500, 4,
                                    0.5*Improved+(1-Improved)*0.5*Sdep + 
@@ -2988,11 +3013,9 @@ sim_data <- data.frame(SQUARE = gl(100,5)) %>%
   mutate(Ell_diffYear3 = rstudent_t(500, 4,
                                     pH_diffYear3*(1-Improved) + 
                                       Improved*0.5*pH_diffYear3 + 
-                                      (pH_year2>5.5)*-0.5*logN_year2,EllSE_year2)) %>%
+                                      (pH_year2>5.5)*-0.5*Ndep,EllSE_year2)) %>%
   select(SQUARE, REP_ID, Sdep, Ndep, Improved,
          rain_year12 = rain_year2,rain_year23 = rain_year3,
-         C_year12 = logC_year1, C_year23 = logC_year2,
-         N_year12 = logN_year1, N_year23 = logN_year2,
          PH_SE_year12 = pHSE_year1, PH_SE_year23 = pHSE_year2,
          ELL_SE_year12 = EllSE_year1, ELL_SE_year23 = EllSE_year2,
          PH_year12 = pH_diffYear2, PH_year23 = pH_diffYear3,
@@ -3006,14 +3029,11 @@ psych::multi.hist(select_if(sim_data, is.numeric))
 psych::pairs.panels(select_if(sim_data, is.numeric), rug = FALSE)
 
 
-sim_mod <- brm(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, N, Improved) + 
-                    (1|SQUARE) +
-                    ar(time = YRnm, gr = REP_ID),
-                  family = "student") +
-                 bf(PH | mi(PH_SE)  ~ Improved*Sdep + rain + (1|SQUARE) +
-                      ar(time = YRnm, gr = REP_ID), family = "student") + 
-                 bf(N ~ Ndep + C + (1|SQUARE) +
-                      ar(time = YRnm, gr = REP_ID)) +
+sim_mod <- brm(bf(Ell | mi(ELL_SE) ~ Improved*mi(PH) + s(Year1_pH, Ndep, Improved) + 
+                    (1|p|SQUARE) +
+                    ar(time = YRnm, gr = REP_ID)) +
+                 bf(PH | mi(PH_SE)  ~ Improved*Sdep + rain + (1|p|SQUARE) +
+                      ar(time = YRnm, gr = REP_ID)) + 
                  set_rescor(FALSE), data = sim_data, prior = mod_pr,
                save_pars = save_pars(all = TRUE, latent = TRUE), 
                cores = 4, iter = 4000)
@@ -3024,7 +3044,8 @@ pp_check(sim_mod, nsamples = 50, resp = "N")
 
 plot(conditional_effects(sim_mod))
 
-# Normal
+
+# ~~~ 200m2 weighted ####
 mod_data <- ELL_pH %>%
   filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
@@ -3032,74 +3053,32 @@ mod_data <- ELL_pH %>%
          Ell = WH_R_W) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO, ELL_SE = ELL_WH_W_SE_NORM, 
+         ELL_SE = ELL_WH_W_SE_NORM, 
          PH_SE = PH_DIW_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
          Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
-         N = as.numeric(scale(N)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
 
-mod_pr_norm <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
-                 prior(normal(0,0.5), class = "b", resp = "PH"),
-                 prior(normal(0,0.5), class = "b", resp = "N"),
-                 prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
-                 prior(student_t(3, 0, 2.5), class = "sds", resp = "PH"),
-                 prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
-                 prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-                 prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-                 prior(normal(0,0.2), class = "ar", resp = "Ell"),
-                 prior(normal(0,0.2), class = "ar", resp = "PH"),
-                 prior(normal(0,0.2), class = "ar", resp = "N"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "N"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
 
-full_mod_whw_norm <- brm(bf(Ell | mi(ELL_SE)  ~ Management*mi(PH) + s(Year1_pH, N, Management) + 
-                         (1|SQUARE) +
-                         ar(time = YRnm, gr = REP_ID)) +
-                      bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain  + s(Year1_pH, N, Management) +
-                           (1|SQUARE) +
-                           ar(time = YRnm, gr = REP_ID)) + 
-                      bf(N ~ Ndep + (1|SQUARE) +
-                           ar(time = YRnm, gr = REP_ID)) +
-                      set_rescor(FALSE), data = mod_data, prior = mod_pr_norm,
-                    save_pars = save_pars(all = TRUE, latent = TRUE), 
-                    cores = 4, iter = 2000)
-summary(full_mod_whw_norm)
-plot(full_mod_whw_norm, ask = FALSE)
-pp_check(full_mod_whw_norm, nsamples = 50, resp = "Ell")
-pp_check(full_mod_whw_norm, nsamples = 50, resp = "PH")
-pp_check(full_mod_whw_norm, nsamples = 50, resp = "N")
-
-mod_pr <- mod_pr_norm
-
-
-# ~~~ 200m2 weighted ####
 # run model - full weighted Ell R
-full_mod_whw <- brm(bf(Ell | mi(ELL_SE)  ~ Management*mi(PH) + s(Year1_pH, N) + 
+full_mod_whw_nocor <- brm(bf(Ell | mi(ELL_SE)  ~ Management*mi(PH) + s(Year1_pH, Ndep) + 
                          (1|SQUARE) +
                          ar(time = YRnm, gr = REP_ID)) +
                       bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain  + 
-                           s(Year1_pH, N) +
+                           s(Year1_pH, Ndep) +
                            (1|SQUARE) +
                            ar(time = YRnm, gr = REP_ID)) + 
-                      bf(N ~ Ndep + (1|SQUARE) +
-                           ar(time = YRnm, gr = REP_ID)) +
-                      set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                      set_rescor(FALSE), data = mod_data, prior = mod_pr[1:11,],
                     save_pars = save_pars(all = TRUE, latent = TRUE), 
-                    file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_N_HAB",
-                    cores = 4, iter = 4000, control = list(adapt_delta = 0.95))
+                    # file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_HAB",
+                    cores = 4, iter = 4000)
 summary(full_mod_whw)
 plot(full_mod_whw, ask = FALSE)
 pp_check(full_mod_whw, nsamples = 50, resp = "Ell")
 pp_check(full_mod_whw, nsamples = 50, resp = "PH")
-pp_check(full_mod_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_whw))
 # check residuals against habitat
@@ -3117,8 +3096,7 @@ all.equal(BH_plot$YRnm, mod_data$YRnm)
 
 BH_plot <- mutate(BH_plot,
                   Ell_resid = full_mod_whw_resid[,1,"Ell"],
-                  PH_resid = full_mod_whw_resid[,1,"PH"],
-                  N_resid = full_mod_whw_resid[,1,"N"]) %>%
+                  PH_resid = full_mod_whw_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3137,38 +3115,31 @@ ggsave("Residuals by habitat whole weighted full model.png",
 # No pH ~ N spline
 mod_pr_red1 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(normal(0,0.5), class = "b", resp = "PH"),
-                 prior(normal(0,0.5), class = "b", resp = "N"),
                  prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-                 prior(student_t(3,0,1), class = "Intercept", resp = "N"),
                  prior(normal(0,0.2), class = "ar", resp = "Ell"),
                  prior(normal(0,0.2), class = "ar", resp = "PH"),
-                 prior(normal(0,0.2), class = "ar", resp = "N"),
                  prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
                  prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "N"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
+                 prior(lkj(2), class = "cor"))
 
-red_mod_1_whw <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, N) + 
-                          (1|SQUARE) +
+red_mod_1_whw <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, Ndep) + 
+                          (1|p|SQUARE) +
                           ar(time = YRnm, gr = REP_ID)) +
                        bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain +
-                            (1|SQUARE) +
+                            (1|p|SQUARE) +
                             ar(time = YRnm, gr = REP_ID)) + 
-                       bf(N ~ Ndep + (1|SQUARE) +
-                            ar(time = YRnm, gr = REP_ID)) +
                        set_rescor(FALSE), data = mod_data, prior = mod_pr_red1,
                      save_pars = save_pars(all = TRUE, latent = TRUE), 
-                     file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_N_HAB",
+                     file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_HAB",
                      cores = 4, iter = 4000, control = list(adapt_delta = 0.99))
 summary(red_mod_1_whw)
 plot(red_mod_1_whw, ask = FALSE)
 pp_check(red_mod_1_whw, nsamples = 50, resp = "Ell")
 pp_check(red_mod_1_whw, nsamples = 50, resp = "PH")
-pp_check(red_mod_1_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_whw))
 # check residuals against habitat
@@ -3182,8 +3153,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3203,36 +3173,29 @@ ggsave("Residuals by habitat whole weighted reduced model 1.png",
 # No Ell ~ N spline
 mod_pr_red2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
                  prior(normal(0,0.5), class = "b", resp = "PH"),
-                 prior(normal(0,0.5), class = "b", resp = "N"),
                  prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
                  prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-                 prior(student_t(3,0,1), class = "Intercept", resp = "N"),
                  prior(normal(0,0.2), class = "ar", resp = "Ell"),
                  prior(normal(0,0.2), class = "ar", resp = "PH"),
-                 prior(normal(0,0.2), class = "ar", resp = "N"),
                  prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
                  prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "N"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
                  prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
+                 prior(lkj(2), class = "cor"))
 red_mod_2_whw <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + 
-                          (1|SQUARE) +
+                          (1|p|SQUARE) +
                           ar(time = YRnm, gr = REP_ID)) +
                        bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain +
-                            (1|SQUARE) +
+                            (1|p|SQUARE) +
                             ar(time = YRnm, gr = REP_ID)) + 
-                       bf(N ~ Ndep + (1|SQUARE) +
-                            ar(time = YRnm, gr = REP_ID)) +
                        set_rescor(FALSE), data = mod_data, prior = mod_pr_red2,
                      save_pars = save_pars(all = TRUE, latent = TRUE), 
-                     file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_PH_N_HAB",
+                     file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_PH_HAB",
                      cores = 4, iter = 4000, control = list(adapt_delta = 0.999))
 summary(red_mod_2_whw)
 plot(red_mod_2_whw, ask = FALSE)
 pp_check(red_mod_2_whw, nsamples = 50, resp = "Ell")
 pp_check(red_mod_2_whw, nsamples = 50, resp = "PH")
-pp_check(red_mod_2_whw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whw))
 # check residuals against habitat
@@ -3246,8 +3209,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3279,13 +3241,12 @@ mod_data <- ELL_pH %>%
          Ell = WH_R_UW) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO, PH_SE = PH_DIW_SE_NORM,
+         PH_SE = PH_DIW_SE_NORM,
          ELL_SE = ELL_WH_UW_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
          Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
-         N = as.numeric(scale(N)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
 
@@ -3295,13 +3256,12 @@ mod_data <- ELL_pH %>%
 full_mod_whuw <- update(full_mod_whw, newdata = mod_data,
                         control = list(adapt_delta = 0.95),
                         cores = 4, iter = 4000,
-                        file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_spl_N_HAB")
+                        file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_spl_HAB")
 
 summary(full_mod_whuw)
 plot(full_mod_whuw, ask = FALSE)
 pp_check(full_mod_whuw, nsamples = 50, resp = "Ell")
 pp_check(full_mod_whuw, nsamples = 50, resp = "PH")
-pp_check(full_mod_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_whuw))
 # check residuals against habitat
@@ -3315,8 +3275,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3338,13 +3297,12 @@ ggsave("Residuals by habitat whole unweighted full model.png",
 red_mod_1_whuw <- update(red_mod_1_whw, newdata = mod_data,
                          cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.999),
-                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_N_HAB")
+                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_spl_PH_HAB")
 
 summary(red_mod_1_whuw)
 plot(red_mod_1_whuw, ask = FALSE)
 pp_check(red_mod_1_whuw, nsamples = 50, resp = "Ell")
 pp_check(red_mod_1_whuw, nsamples = 50, resp = "PH")
-pp_check(red_mod_1_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_whuw))
 # check residuals against habitat
@@ -3358,8 +3316,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3379,13 +3336,12 @@ ggsave("Residuals by habitat whole unweighted reduced model 1.png",
 red_mod_2_whuw <- update(red_mod_2_whw, newdata = mod_data,
                          cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.999),
-                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_PH_N_HAB")
+                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHUW_PH_HAB")
 
 summary(red_mod_2_whuw)
 plot(red_mod_2_whuw, ask = FALSE)
 pp_check(red_mod_2_whuw, nsamples = 50, resp = "Ell")
 pp_check(red_mod_2_whuw, nsamples = 50, resp = "PH")
-pp_check(red_mod_2_whuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_whuw))
 mod_resid <- resid(red_mod_2_whuw)
@@ -3398,8 +3354,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3430,13 +3385,12 @@ mod_data <- ELL_pH %>%
          Ell = SM_R_W) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO, PH_SE = PH_DIW_SE_NORM,
+         PH_SE = PH_DIW_SE_NORM,
          ELL_SE = ELL_SM_W_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
          Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
-         N = as.numeric(scale(N)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
 
@@ -3446,13 +3400,12 @@ mod_data <- ELL_pH %>%
 full_mod_smw <- update(full_mod_whw, newdata = mod_data,
                        cores = 4, iter = 5000,
                        control = list(adapt_delta = 0.95),
-                       file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_spl_N_HAB")
+                       file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_spl_HAB")
 
 summary(full_mod_smw)
 plot(full_mod_smw, ask = FALSE)
 pp_check(full_mod_smw, nsamples = 50, resp = "Ell")
 pp_check(full_mod_smw, nsamples = 50, resp = "PH")
-pp_check(full_mod_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_smw))
 mod_resid <- resid(full_mod_smw)
@@ -3465,8 +3418,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3487,13 +3439,12 @@ ggsave("Residuals by habitat small weighted full model.png",
 red_mod_1_smw <- update(red_mod_1_whw, newdata = mod_data,
                         cores = 4, iter = 4000,
                         control = list(adapt_delta = 0.99),
-                        file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_N_HAB")
+                        file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_spl_PH_HAB")
 
 summary(red_mod_1_smw)
 plot(red_mod_1_smw, ask = FALSE)
 pp_check(red_mod_1_smw, nsamples = 50, resp = "Ell")
 pp_check(red_mod_1_smw, nsamples = 50, resp = "PH")
-pp_check(red_mod_1_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_smw))
 mod_resid <- resid(red_mod_1_smw)
@@ -3506,8 +3457,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3527,13 +3477,12 @@ ggsave("Residuals by habitat small weighted reduced model 1.png",
 red_mod_2_smw <- update(red_mod_2_whw, newdata = mod_data,
                         cores = 4, iter = 4000,
                         control = list(adapt_delta = 0.999),
-                        file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_PH_N_HAB")
+                        file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMW_PH_HAB")
 
 summary(red_mod_2_smw)
 plot(red_mod_2_smw, ask = FALSE)
 pp_check(red_mod_2_smw, nsamples = 50, resp = "Ell")
 pp_check(red_mod_2_smw, nsamples = 50, resp = "PH")
-pp_check(red_mod_2_smw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smw))
 mod_resid <- resid(red_mod_2_smw)
@@ -3546,8 +3495,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3578,13 +3526,12 @@ mod_data <- ELL_pH %>%
          Ell = SM_R_UW) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO, PH_SE = PH_DIW_SE_NORM,
+         PH_SE = PH_DIW_SE_NORM,
          ELL_SE = ELL_SM_UW_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
          Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
-         N = as.numeric(scale(N)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
 
@@ -3594,13 +3541,12 @@ mod_data <- ELL_pH %>%
 full_mod_smuw <- update(full_mod_whw, newdata = mod_data,
                         cores = 4, iter = 4000,
                         control = list(adapt_delta = 0.95),
-                        file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_spl_N_HAB")
+                        file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_spl_HAB")
 
 summary(full_mod_smuw)
 plot(full_mod_smuw, ask = FALSE)
 pp_check(full_mod_smuw, nsamples = 50, resp = "Ell")
 pp_check(full_mod_smuw, nsamples = 50, resp = "PH")
-pp_check(full_mod_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(full_mod_smuw))
 mod_resid <- resid(full_mod_smuw)
@@ -3613,8 +3559,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3635,13 +3580,12 @@ ggsave("Residuals by habitat small unweighted full model.png",
 red_mod_1_smuw <- update(red_mod_1_whw, newdata = mod_data,
                          cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.99),
-                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_N_HAB")
+                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_spl_PH_HAB")
 
 summary(red_mod_1_smuw)
 plot(red_mod_1_smuw, ask = FALSE)
 pp_check(red_mod_1_smuw, nsamples = 50, resp = "Ell")
 pp_check(red_mod_1_smuw, nsamples = 50, resp = "PH")
-pp_check(red_mod_1_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_1_smuw))
 mod_resid <- resid(red_mod_1_smuw)
@@ -3654,8 +3598,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3676,13 +3619,12 @@ ggsave("Residuals by habitat small unweighted reduced model 1.png",
 red_mod_2_smuw <- update(red_mod_2_whw, newdata = mod_data,
                          cores = 4, iter = 4000,
                          control = list(adapt_delta = 0.999),
-                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_PH_N_HAB")
+                         file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_SMUW_PH_HAB")
 
 summary(red_mod_2_smuw)
 plot(red_mod_2_smuw, ask = FALSE)
 pp_check(red_mod_2_smuw, nsamples = 50, resp = "Ell")
 pp_check(red_mod_2_smuw, nsamples = 50, resp = "PH")
-pp_check(red_mod_2_smuw, nsamples = 50, resp = "N")
 
 # plot(conditional_effects(red_mod_2_smuw))
 
@@ -3696,8 +3638,7 @@ BH_plot <- left_join(mod_data,
                           "Broadleaved Mixed and Yew Woodland" = "Broadleaved Woodland"))
 BH_plot <- mutate(BH_plot,
                   Ell_resid = mod_resid[,1,"Ell"],
-                  PH_resid = mod_resid[,1,"PH"],
-                  N_resid = mod_resid[,1,"N"]) %>%
+                  PH_resid = mod_resid[,1,"PH"]) %>%
   pivot_longer(ends_with("resid")) %>%
   mutate(name = sapply(strsplit(name, "_"),"[",1))
 
@@ -3727,7 +3668,7 @@ loo_compare(full_mod_smuw, red_mod_1_smuw, red_mod_2_smuw,
 nd <- 
   tibble(Year1_pH = seq(from = -2.25, to = 3.6, length.out = 30) %>% 
            rep(., times = 6),
-         N = rep(c(-1,0,1), each = 30) %>% 
+         Ndep = rep(c(-1,0,1), each = 30) %>% 
            rep(., times = 2),
          Management = rep(0:1, each = 90),
          Sdep = 0,
@@ -3764,7 +3705,7 @@ f <- do.call(rbind, list(
 plot_dat <- ELL_pH %>% 
   select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
          PH,Management, REP_ID, Time_period,
-         Year1_pH, N = NC_RATIO) %>%
+         Year1_pH, Ndep) %>%
   filter(!is.na(Management)) %>%
   pivot_longer(contains("_R_"), names_to = "Response") %>%
   mutate(Response = recode(Response,
