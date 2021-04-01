@@ -172,9 +172,9 @@ summary(mod_ph_sdep8yr)
 phdep_20yr <- filter(phdep_data,
                      Duration == "20yr")
 mod_ph_sdep20yr <- brm(PH ~ Sdep + (1|SQUARE) +
-                        ar(time = YRnm, gr = REP_ID),
-                      family = "student", prior = mod_pr, data = phdep_20yr,
-                      cores = 4, iter = 4000)
+                         ar(time = YRnm, gr = REP_ID),
+                       family = "student", prior = mod_pr, data = phdep_20yr,
+                       cores = 4, iter = 4000)
 summary(mod_ph_sdep20yr)
 plot(conditional_effects(mod_ph_sdep20yr), points = TRUE)
 plot(conditional_effects(mod_ph_sdep8yr), points = TRUE)
@@ -1744,14 +1744,14 @@ full_mod <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Ndep, Year1_pH) +
 summary(full_mod)
 parnames(full_mod)
 pairs(full_mod$fit, pars = c("b_Ell_Intercept",
-                              "b_PH_Intercept",
-                              "sd_SQUARE__PH_Intercept",
-                              "sd_SQUARE__Ell_Intercept",
-                              "ar_PH[1]",
-                              "sds_PH_sSdepNdepYear1_pH_1",
-                              "sigma_PH",
-                              "bs_PH_sSdepNdepYear1_pH_9",
-                              "b_PH_fieldseason_rain"),
+                             "b_PH_Intercept",
+                             "sd_SQUARE__PH_Intercept",
+                             "sd_SQUARE__Ell_Intercept",
+                             "ar_PH[1]",
+                             "sds_PH_sSdepNdepYear1_pH_1",
+                             "sigma_PH",
+                             "bs_PH_sSdepNdepYear1_pH_9",
+                             "b_PH_fieldseason_rain"),
       log = TRUE)
 plot(full_mod, pars = grep("^s_PH", parnames(full_mod), value = TRUE),
      fixed = TRUE)
@@ -1760,6 +1760,8 @@ plot(full_mod2, pars = parnames(full_mod2),
 
 util <- new.env()
 source('stan_utility.R', local=util)
+c_dark_trans <- "#80808080"
+c_yellow_trans <- "#FFFF0080"
 
 partition_fullmod <- util$partition_div(full_mod$fit)
 
@@ -1775,18 +1777,94 @@ for (i in 1:100){
        ylab="log(sds_pH_spline)", xlab = paste("Spline:",i))
   points(partition_fullmod[[1]][name_x][,1], 
          log(partition_fullmod[[1]]$sds_PH_sSdepNdepYear1_pH_1),
-         col=c_green_trans, pch=16)
+         col=c_yellow_trans, pch=16)
 }
 
+spline_vars <- grep("^s_Ell_sNdepYear1_pH_",
+                    parnames(full_mod3),
+                    value = TRUE)
+par(mfrow=c(3,3), mar = c(4,4,2,2))
+for (i in 1:27){
+  name_x <- spline_vars[i]
+  plot(partition_fullmod[[2]][name_x][,1],
+       log(partition_fullmod[[2]][,"sds_Ell_sNdepYear1_pH_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+  points(partition_fullmod[[1]][name_x][,1], 
+         log(partition_fullmod[[1]]$sds_Ell_sNdepYear1_pH_1),
+         col=c_yellow_trans, pch=16)
+}
+
+# plot MANY MUCH THING
+plot_pars <- parnames(full_mod)[1:24]
+
+pairs(full_mod$fit, pars = plot_pars[1:12],
+      log = TRUE)
+pairs(full_mod$fit, pars = plot_pars[13:24],
+      log = TRUE)
+
+
+par(mfrow=c(3,4))
+for(i in 1:12){
+  name_x <- plot_pars[i]
+  for(j in 13:24){
+    name_y <- plot_pars[j]
+    y <- if(grepl("^s",name_y))
+      log(partition_fullmod[[2]][name_y][,1]) else
+                partition_fullmod[[2]][name_y][,1]
+    ydiv <- if(grepl("^s",name_y)) 
+      log(partition_fullmod[[1]][name_y][,1]) else
+        partition_fullmod[[1]][name_y][,1]
+    
+    plot(partition_fullmod[[2]][name_x][,1],
+         y, xlab = name_x, ylab = name_y,
+         col=c_dark_trans, pch=16, main="")
+    points(partition_fullmod[[1]][name_x][,1],
+           ydiv,
+           col=c_yellow_trans, pch=16)
+  }
+  invisible(readline(prompt="Press [enter] to continue"))
+}
+
+plot_pars <- parnames(full_mod)
+par(mfrow=c(5,5), mar = c(4,4,1,1))
+for(i in 4:24){
+  name_x <- plot_pars[i]
+  x <- if(grepl("^s",name_x))
+    log(partition_fullmod[[2]][name_x][,1]) else
+      partition_fullmod[[2]][name_x][,1]
+  xdiv <- if(grepl("^s",name_x)) 
+    log(partition_fullmod[[1]][name_x][,1]) else
+      partition_fullmod[[1]][name_x][,1]
+  
+  for(j in 350:499){
+    name_y <- plot_pars[j]
+    y <- partition_fullmod[[2]][name_y][,1]
+    ydiv <- partition_fullmod[[1]][name_y][,1]
+    
+    plot(x,
+         y, xlab = name_x, ylab = name_y,
+         col=c_dark_trans, pch=16, main="")
+    points(xdiv,
+           ydiv,
+           col=c_yellow_trans, pch=16)
+    
+    if(j %in% c(5*5*(1:19)+24))
+      invisible(readline(prompt="Press [enter] to continue"))
+  }
+  
+}
+
+
 full_mod2 <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Ndep, Year1_pH) + 
-                     (1|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
-                  bf(PH | mi(PH_SE)  ~ fieldseason_rain + s(Sdep, Ndep, Year1_pH) + 
-                       (1|SQUARE) +
-                       ar(time = YRnm, gr = REP_ID)) + 
-                  set_rescor(FALSE),
-                data = mod_data_low, prior = mod_pr[1:16,],
-                cores = 4, iter = 4000, seed = 4575421286,
-                file = "Outputs/Models/Difference/Test_fullmod2_2903121")
+                      (1|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
+                   bf(PH | mi(PH_SE)  ~ fieldseason_rain + s(Sdep, Ndep, Year1_pH) + 
+                        (1|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID)) + 
+                   set_rescor(FALSE),
+                 data = mod_data_low, prior = mod_pr[1:16,],
+                 cores = 4, iter = 4000, seed = 4575421286,
+                 file = "Outputs/Models/Difference/Test_fullmod2_2903121")
 # divergent transitions
 summary(full_mod2)
 parnames(full_mod2)
@@ -1830,14 +1908,14 @@ for (i in 1:100){
 
 
 mod2 <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Ndep, Year1_pH) + 
-                     (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
-                  bf(PH | mi(PH_SE)  ~ fieldseason_rain + s(Sdep) + s(Ndep, Year1_pH) + 
-                       (1|p|SQUARE) +
-                       ar(time = YRnm, gr = REP_ID)) + 
-                  set_rescor(FALSE),
-                data = mod_data_low, prior = mod_pr,
-                cores = 4, iter = 4000, seed = 6856231456,
-                file = "Outputs/Models/Difference/Test_mod2_2903121")
+                 (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
+              bf(PH | mi(PH_SE)  ~ fieldseason_rain + s(Sdep) + s(Ndep, Year1_pH) + 
+                   (1|p|SQUARE) +
+                   ar(time = YRnm, gr = REP_ID)) + 
+              set_rescor(FALSE),
+            data = mod_data_low, prior = mod_pr,
+            cores = 4, iter = 4000, seed = 6856231456,
+            file = "Outputs/Models/Difference/Test_mod2_2903121")
 # divergent transitions
 summary(mod2)
 parnames(mod2)
@@ -1922,6 +2000,21 @@ for (i in 1:length(spline_vars)){
          col=c_yellow_trans, pch=16)
 }
 
+spline_vars <- grep("^s_Ell_sNdepYear1_pH_",
+                    parnames(mod2),
+                    value = TRUE)
+par(mfrow=c(3,3), mar = c(4,4,2,2))
+for (i in 1:27){
+  name_x <- spline_vars[i]
+  plot(partition_mod2[[2]][name_x][,1],
+       log(partition_mod2[[2]][,"sds_Ell_sNdepYear1_pH_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+  points(partition_mod2[[1]][name_x][,1], 
+         log(partition_mod2[[1]]$sds_Ell_sNdepYear1_pH_1),
+         col=c_yellow_trans, pch=16)
+}
+
 
 
 
@@ -1964,23 +2057,41 @@ summary(mod3v2)
 plot(mod3v2)
 plot(conditional_effects(mod3v2))
 
+spline_vars <- grep("^s_Ell_sNdepYear1_pH_",
+                    parnames(mod3v2),
+                    value = TRUE)
+partition <- util$partition_div(mod3v2$fit)
+par(mfrow=c(3,3), mar = c(4,4,2,2))
+for (i in 1:27){
+  name_x <- spline_vars[i]
+  plot(partition[[2]][name_x][,1],
+       log(partition[[2]][,"sds_Ell_sNdepYear1_pH_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+  points(partition[[1]][name_x][,1], 
+         log(partition[[1]]$sds_Ell_sNdepYear1_pH_1),
+         col=c_yellow_trans, pch=16)
+}
+
+
+
 mod_pr2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
-            prior(normal(0,0.5), class = "b", resp = "PH"),
-            prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
-            prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-            prior(normal(2,0.5), class = "ar", resp = "Ell"),
-            prior(normal(2,0.5), class = "ar", resp = "PH"),
-            prior(student_t(3,0,1), class = "sd", resp = "Ell"),
-            prior(student_t(3,0,1), class = "sd", resp = "PH"),
-            prior(normal(0,1), class = "sds", resp = "Ell"),
-            prior(normal(0,1), class = "sds", resp = "PH"),
-            prior(student_t(3,0,1), class = "sigma", resp = "Ell"),
-            prior(student_t(3,0,1), class = "sigma", resp = "PH"),
-            prior(student_t(3,0,5), class = "meanme", resp = "Ell"),
-            prior(student_t(3,0,5), class = "meanme", resp = "PH"),
-            prior(student_t(3,0,5), class = "sdme", resp = "Ell"),
-            prior(student_t(3,0,5), class = "sdme", resp = "PH"),
-            prior(lkj(5), class = "cor"))
+             prior(normal(0,0.5), class = "b", resp = "PH"),
+             prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+             prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+             prior(normal(2,0.5), class = "ar", resp = "Ell"),
+             prior(normal(2,0.5), class = "ar", resp = "PH"),
+             prior(student_t(3,0,1), class = "sd", resp = "Ell"),
+             prior(student_t(3,0,1), class = "sd", resp = "PH"),
+             prior(normal(0,1), class = "sds", resp = "Ell"),
+             prior(normal(0,1), class = "sds", resp = "PH"),
+             prior(student_t(3,0,1), class = "sigma", resp = "Ell"),
+             prior(student_t(3,0,1), class = "sigma", resp = "PH"),
+             prior(student_t(3,0,5), class = "meanme", resp = "Ell"),
+             prior(student_t(3,0,5), class = "meanme", resp = "PH"),
+             prior(student_t(3,0,5), class = "sdme", resp = "Ell"),
+             prior(student_t(3,0,5), class = "sdme", resp = "PH"),
+             prior(lkj(5), class = "cor"))
 mod2v2 <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Ndep, Year1_pH) + 
                    (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
                 bf(PH | mi(PH_SE)  ~ fieldseason_rain + s(Sdep) + s(Ndep, Year1_pH) + 
@@ -1994,14 +2105,14 @@ mod2v2 <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Ndep, Year1_pH) +
 summary(mod2v2)
 parnames(mod2v2)
 pairs(mod2v2$fit, pars = c("b_Ell_Intercept",
-                         "b_PH_Intercept",
-                         "sd_SQUARE__PH_Intercept",
-                         "sd_SQUARE__Ell_Intercept",
-                         "ar_PH[1]",
-                         "sds_PH_sNdepYear1_pH_1",
-                         "sigma_PH",
-                         "bs_PH_sNdepYear1_pH_2",
-                         "b_PH_fieldseason_rain"),
+                           "b_PH_Intercept",
+                           "sd_SQUARE__PH_Intercept",
+                           "sd_SQUARE__Ell_Intercept",
+                           "ar_PH[1]",
+                           "sds_PH_sNdepYear1_pH_1",
+                           "sigma_PH",
+                           "bs_PH_sNdepYear1_pH_2",
+                           "b_PH_fieldseason_rain"),
       log = TRUE)
 plot(mod2, pars = c("b_PH_Intercept",
                     "sd_SQUARE__PH_Intercept",
@@ -2013,13 +2124,13 @@ plot(mod2, pars = c("b_PH_Intercept",
 plot(mod2v2, pars = parnames(mod2), fixed = TRUE,
      window = c(500,1500))
 pairs(mod2v2$fit, pars = c("sds_PH_sSdep_1",
-                         "bs_PH_sSdep_1",
-                         "ar_PH[1]",
-                         "b_PH_fieldseason_rain",
-                         "sd_SQUARE__PH_Intercept",
-                         "r_SQUARE__PH[63,Intercept]",
-                         "s_PH_sNdepYear1_pH_1[8]",
-                         "s_PH_sSdep_1[7]"),
+                           "bs_PH_sSdep_1",
+                           "ar_PH[1]",
+                           "b_PH_fieldseason_rain",
+                           "sd_SQUARE__PH_Intercept",
+                           "r_SQUARE__PH[63,Intercept]",
+                           "s_PH_sNdepYear1_pH_1[8]",
+                           "s_PH_sSdep_1[7]"),
       log = TRUE)
 pairs(mod2v2$fit, pars = c("sds_PH_sSdep_1",
                            "s_PH_sSdep_1[1]",
@@ -2087,15 +2198,378 @@ mod7 <- brm(PH ~ s(Sdep),
             cores = 4, iter = 4000, seed = 6856231456)
 
 full_mod3 <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH) + s(Ndep, Year1_pH) + 
+                      (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
+                   bf(PH | mi(PH_SE)  ~ fieldseason_rain + s(Sdep, Ndep, Year1_pH) + 
+                        (1|p|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID)) + 
+                   set_rescor(FALSE),
+                 data = mod_data_low, prior = mod3_pr,
+                 control = list(adapt_delta = 0.99999999, max_treedepth = 20),
+                 cores = 4, iter = 4000, seed = 6856231456,
+                 file = "Outputs/Models/Difference/Test_fullmod3_3103121")
+
+spline_vars <- grep("^s_PH_sSdepNdepYear1_pH_1",
+                    parnames(full_mod3),
+                    value = TRUE)
+test <- as.matrix(full_mod3)
+par(mfrow=c(4,5), mar = c(4,4,2,2))
+for (i in 1:100){
+  name_x <- spline_vars[i]
+  plot(test[,name_x], 
+       log(test[,"sds_PH_sSdepNdepYear1_pH_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_pH_spline)", xlab = paste("Spline:",i))
+}
+
+spline_vars <- grep("^bs_PH_sSdepNdepYear1_pH_",
+                    parnames(full_mod3),
+                    value = TRUE)
+par(mfrow=c(3,3), mar = c(4,4,2,2))
+for (i in 1:9){
+  name_x <- spline_vars[i]
+  plot(test[,name_x], 
+       log(test[,"sds_PH_sSdepNdepYear1_pH_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_pH_spline)", xlab = paste("Spline:",i))
+}
+
+spline_vars <- grep("^s_Ell_sNdepYear1_pH_",
+                    parnames(full_mod3),
+                    value = TRUE)
+par(mfrow=c(3,3), mar = c(4,4,2,2))
+for (i in 1:27){
+  name_x <- spline_vars[i]
+  plot(test[,name_x], 
+       log(test[,"sds_Ell_sNdepYear1_pH_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+}
+
+
+# 3d surface
+library(plotly)
+
+nd <-
+  tibble(Year1_pH = rep(c(-1,0,1), each = 400),
+         Ndep = seq(-1.7,3.13, length.out = 20) %>% 
+           rep(each = 20) %>%
+           rep(times = 3),
+         Sdep = seq(-6.13,1.25, length.out = 20) %>% 
+           rep(times = 20) %>%
+           rep(times = 3),
+         REP_ID = 1:1200,
+         fieldseason_rain = 0,
+         ELL_SE = 0.3, PH_SE = 0.3,
+         PH = 0, YRnm = 2)
+mod_fit <-  fitted(full_mod3, newdata = nd, re_formula = NA) %>%
+  as_tibble() %>%
+  bind_cols(nd) 
+
+mod_fit <- list(Ndep = seq(-1.7,3.13, length.out = 20),
+                Sdep = seq(-6.13,1.25, length.out = 20),
+                Est_lowpH = matrix(mod_fit$Estimate.PH[1:400],
+                                   nrow = 20, ncol= 20),
+                Est_medpH = matrix(mod_fit$Estimate.PH[401:800],
+                                   nrow = 20, ncol= 20),
+                Est_highpH = matrix(mod_fit$Estimate.PH[801:1200],
+                                    nrow = 20, ncol= 20),
+                Q025_lowpH = matrix(mod_fit$Q2.5.PH[1:400],
+                                    nrow = 20, ncol= 20),
+                Q025_medpH = matrix(mod_fit$Q2.5.PH[401:800],
+                                    nrow = 20, ncol= 20),
+                Q025_highpH = matrix(mod_fit$Q2.5.PH[801:1200],
+                                     nrow = 20, ncol= 20),
+                Q975_lowpH = matrix(mod_fit$Q97.5.PH[1:400],
+                                    nrow = 20, ncol= 20),
+                Q975_medpH = matrix(mod_fit$Q97.5.PH[401:800],
+                                    nrow = 20, ncol= 20),
+                Q975_highpH = matrix(mod_fit$Q97.5.PH[801:1200],
+                                     nrow = 20, ncol= 20))
+# no CI
+fig <- plot_ly(showscale = FALSE)
+fig <- fig %>% add_surface(x = mod_fit$Ndep,
+                           y = mod_fit$Sdep,
+                           z = mod_fit$Est_lowpH,
+                           name = "Low pH",
+                           colorscale = list(c(0,1),c("rgb(240, 123, 31)","rgb(196, 86, 0)")))
+
+fig <- fig %>% add_surface(x = mod_fit$Ndep,
+                           y = mod_fit$Sdep,
+                           z = mod_fit$Est_medpH,
+                           name = "Mean pH",
+                           colorscale = list(c(0,1),c("rgb(9, 237, 175","rgb(0, 156, 113)")))
+
+fig <- fig %>% add_surface(x = mod_fit$Ndep,
+                           y = mod_fit$Sdep,
+                           z = mod_fit$Est_highpH,
+                           name = "High pH",
+                           colorscale = list(c(0,1), c("rgb(0, 145, 227)","rgb(2, 98, 153)")))
+
+fig <- fig %>% add_markers(x = filter(mod_data_low, Year1_pH < -0.5)$Ndep,
+                           y = filter(mod_data_low, Year1_pH < -0.5)$Sdep,
+                           z = filter(mod_data_low, Year1_pH < -0.5)$PH,
+                           name = "Low pH",
+                           color = "#D55E00",
+                           showlegend = FALSE)
+
+fig <- fig %>% add_markers(x = filter(mod_data_low, Year1_pH < 0.5 & Year1_pH > -0.5)$Ndep,
+                           y = filter(mod_data_low, Year1_pH < 0.5 & Year1_pH > -0.5)$Sdep,
+                           z = filter(mod_data_low, Year1_pH < 0.5 & Year1_pH > -0.5)$PH,
+                           name = "Mean pH",
+                           color = "#009E73",
+                           showlegend = FALSE)
+
+fig <- fig %>% add_markers(x = filter(mod_data_low, Year1_pH > 0.5)$Ndep,
+                           y = filter(mod_data_low, Year1_pH > 0.5)$Sdep,
+                           z = filter(mod_data_low, Year1_pH > 0.5)$PH,
+                           name = "High pH",
+                           color = "#0072B2",
+                           showlegend = FALSE)
+
+fig <- fig %>% layout(scene = list(xaxis = list(title = "Ndep"), 
+                                   yaxis = list(title = "Sdep"),
+                                   zaxis = list(title = "pH change")))
+fig
+
+# with CI
+fig <- plot_ly(showscale = FALSE)
+fig <- fig %>% add_markers(x = mod_data_low$Ndep,
+                           y = mod_data_low$Sdep,
+                           z = mod_data_low$PH,
+                           name = "Low pH",
+                           color = mod_data_low$Year1_pH<0,
+                           colors = c("#0072B2","#D55E00"),
+                           opacity = 0.5,
+                           showlegend = FALSE)
+
+fig <- fig %>% add_surface(x = mod_fit$Ndep,
+                           y = mod_fit$Sdep,
+                           z = mod_fit$Est_lowpH,
+                           colorscale = list(c(0,1),c("rgb(240, 123, 31)","rgb(196, 86, 0)")))
+# colors = "#D55E00")
+fig <- fig %>% add_surface(x = mod_fit$Ndep,
+                           y = mod_fit$Sdep,
+                           z = mod_fit$Q025_lowpH, opacity = 0.25,
+                           colorscale = list(c(0,1),c("rgb(240, 123, 31)","rgb(196, 86, 0)")))
+fig <- fig %>% add_surface(x = mod_fit$Ndep,
+                           y = mod_fit$Sdep,
+                           z = mod_fit$Q975_lowpH, opacity = 0.25,
+                           colorscale = list(c(0,1),c("rgb(240, 123, 31)","rgb(196, 86, 0)")))
+
+fig <- fig %>% add_surface(x = mod_fit$Ndep,
+                           y = mod_fit$Sdep,
+                           z = mod_fit$Est_highpH,
+                           colorscale = list(c(0,1), c("rgb(0, 145, 227)","rgb(2, 98, 153)")))
+fig <- fig %>% add_surface(x = mod_fit$Ndep,
+                           y = mod_fit$Sdep,
+                           z = mod_fit$Q025_highpH, opacity = 0.25,
+                           colorscale = list(c(0,1), c("rgb(0, 145, 227)","rgb(2, 98, 153)")))
+fig <- fig %>% add_surface(x = mod_fit$Ndep,
+                           y = mod_fit$Sdep,
+                           z = mod_fit$Q975_highpH, opacity = 0.25,
+                           colorscale = list(c(0,1), c("rgb(0, 145, 227)","rgb(2, 98, 153)")))
+
+
+fig <- fig %>% layout(scene = list(xaxis = list(title = "Ndep"), 
+                                   yaxis = list(title = "Sdep"),
+                                   zaxis = list(title = "pH change")))
+fig
+
+
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Ell = WH_R_W) %>%
+  select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
+         fieldseason_rain, Year1_pH, PH, 
+         ELL_SE = ELL_WH_W_SE_NORM, 
+         PH_SE = PH_DIW_SE_NORM) %>%
+  mutate(Management = as.factor(Management),
+         Sdep = as.numeric(scale(Sdep)), 
+         Ndep = as.numeric(scale(Ndep)), 
+         Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
+         fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
+  na.omit()
+
+mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+            prior(normal(0,0.5), class = "b", resp = "PH"),
+            prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+            prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+            prior(normal(2,0.5), class = "ar", resp = "Ell"),
+            prior(normal(2,0.5), class = "ar", resp = "PH"),
+            prior(student_t(3,0,1), class = "sd", resp = "Ell"),
+            prior(student_t(3,0,1), class = "sd", resp = "PH"),
+            prior(student_t(3,0,1), class = "sds", resp = "Ell"),
+            prior(student_t(3,0,1), class = "sds", resp = "PH"),
+            prior(student_t(3,0,1), class = "sigma", resp = "Ell"),
+            prior(student_t(3,0,1), class = "sigma", resp = "PH"),
+            prior(student_t(3,0,5), class = "meanme", resp = "Ell"),
+            prior(student_t(3,0,5), class = "meanme", resp = "PH"),
+            prior(student_t(3,0,5), class = "sdme", resp = "Ell"),
+            prior(student_t(3,0,5), class = "sdme", resp = "PH"),
+            prior(lkj(5), class = "cor"))
+
+full_mod_hab <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH)*Management + s(Ndep, Year1_pH, by = Management) + 
                      (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
-                  bf(PH | mi(PH_SE)  ~ fieldseason_rain + s(Sdep, Ndep, Year1_pH) + 
+                  bf(PH | mi(PH_SE)  ~ fieldseason_rain + s(Sdep, Ndep, Year1_pH, by = Management) + 
                        (1|p|SQUARE) +
                        ar(time = YRnm, gr = REP_ID)) + 
                   set_rescor(FALSE),
-                data = mod_data_low, prior = mod3_pr,
-                control = list(adapt_delta = 0.99999999, max_treedepth = 20),
+                data = mod_data, prior = mod_pr,
                 cores = 4, iter = 4000, seed = 6856231456,
-                file = "Outputs/Models/Difference/Test_fullmod3_3103121")
+                file = "Outputs/Models/Difference/Test_fullmodhabv2_010421")
+summary(full_mod_hab)
+
+partition_fullmod <- util$partition_div(full_mod_hab$fit)
+
+spline_vars <- grep("^s_PH_sSdepNdepYear1_pH",
+                    colnames(partition_fullmod[[1]]),
+                    value = TRUE)
+par(mfrow=c(5,5))
+for (i in 1:100){
+  name_x <- spline_vars[i]
+  plot(partition_fullmod[[2]][name_x][,1], 
+       log(partition_fullmod[[2]]$sds_PH_sSdepNdepYear1_pHManagementHigh_1),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_pH_spline)", xlab = paste("Spline:",i))
+  points(partition_fullmod[[1]][name_x][,1], 
+         log(partition_fullmod[[1]]$sds_PH_sSdepNdepYear1_pHManagementHigh_1),
+         col=c_yellow_trans, pch=16)
+}
+for (i in 101:200){
+  name_x <- spline_vars[i]
+  plot(partition_fullmod[[2]][name_x][,1], 
+       log(partition_fullmod[[2]]$sds_PH_sSdepNdepYear1_pHManagementLow_1),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_pH_spline)", xlab = paste("Spline:",i))
+  points(partition_fullmod[[1]][name_x][,1], 
+         log(partition_fullmod[[1]]$sds_PH_sSdepNdepYear1_pHManagementLow_1),
+         col=c_yellow_trans, pch=16)
+}
+
+spline_vars <- grep("^s_Ell_sNdepYear1_pH",
+                    parnames(full_mod_hab),
+                    value = TRUE)
+par(mfrow=c(3,3))
+for (i in 1:27){
+  name_x <- spline_vars[i]
+  plot(partition_fullmod[[2]][name_x][,1],
+       log(partition_fullmod[[2]][,"sds_Ell_sNdepYear1_pHManagementHigh_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+  points(partition_fullmod[[1]][name_x][,1], 
+         log(partition_fullmod[[1]]$sds_Ell_sNdepYear1_pHManagementHigh_1),
+         col=c_yellow_trans, pch=16)
+}
+for (i in 28:54){
+  name_x <- spline_vars[i]
+  plot(partition_fullmod[[2]][name_x][,1],
+       log(partition_fullmod[[2]][,"sds_Ell_sNdepYear1_pHManagementLow_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+  points(partition_fullmod[[1]][name_x][,1], 
+         log(partition_fullmod[[1]]$sds_Ell_sNdepYear1_pHManagementLow_1),
+         col=c_yellow_trans, pch=16)
+}
+
+
+mod3_hab <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH)*Management + s(Ndep, Year1_pH, by = Management) + 
+                         (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
+                      bf(PH | mi(PH_SE)  ~ fieldseason_rain + Sdep*Management + s(Ndep, Year1_pH, by = Management) + 
+                           (1|p|SQUARE) +
+                           ar(time = YRnm, gr = REP_ID)) + 
+                      set_rescor(FALSE),
+                    data = mod_data, prior = mod_pr,
+                    cores = 4, iter = 4000, seed = 6856231456,
+                    file = "Outputs/Models/Difference/Test_mod3hab_010421")
+summary(mod3_hab)
+
+partition_fullmod <- util$partition_div(mod3_hab$fit)
+
+spline_vars <- grep("^s_Ell_sNdepYear1_pH",
+                    parnames(mod3_hab),
+                    value = TRUE)
+par(mfrow=c(3,3))
+for (i in 1:27){
+  name_x <- spline_vars[i]
+  plot(partition_fullmod[[2]][name_x][,1],
+       log(partition_fullmod[[2]][,"sds_Ell_sNdepYear1_pHManagementHigh_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+  points(partition_fullmod[[1]][name_x][,1], 
+         log(partition_fullmod[[1]]$sds_Ell_sNdepYear1_pHManagementHigh_1),
+         col=c_yellow_trans, pch=16)
+}
+for (i in 28:54){
+  name_x <- spline_vars[i]
+  plot(partition_fullmod[[2]][name_x][,1],
+       log(partition_fullmod[[2]][,"sds_Ell_sNdepYear1_pHManagementLow_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+  points(partition_fullmod[[1]][name_x][,1], 
+         log(partition_fullmod[[1]]$sds_Ell_sNdepYear1_pHManagementLow_1),
+         col=c_yellow_trans, pch=16)
+}
+
+
+
+mod_pr2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+            prior(normal(0,0.5), class = "b", resp = "PH"),
+            prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+            prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+            prior(normal(2,0.5), class = "ar", resp = "Ell"),
+            prior(normal(2,0.5), class = "ar", resp = "PH"),
+            prior(student_t(3,0,1), class = "sd", resp = "Ell"),
+            prior(student_t(3,0,1), class = "sd", resp = "PH"),
+            prior(gamma(3,2), class = "sds", resp = "Ell"),
+            prior(student_t(3,0,1), class = "sds", resp = "PH"),
+            prior(student_t(3,0,1), class = "sigma", resp = "Ell"),
+            prior(student_t(3,0,1), class = "sigma", resp = "PH"),
+            prior(student_t(3,0,5), class = "meanme", resp = "Ell"),
+            prior(student_t(3,0,5), class = "meanme", resp = "PH"),
+            prior(student_t(3,0,5), class = "sdme", resp = "Ell"),
+            prior(student_t(3,0,5), class = "sdme", resp = "PH"),
+            prior(lkj(5), class = "cor"))
+
+full_mod_hab_v2 <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH)*Management + s(Ndep, Year1_pH, by = Management) + 
+                            (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
+                         bf(PH | mi(PH_SE)  ~ fieldseason_rain + s(Sdep, Ndep, Year1_pH, by = Management) + 
+                              (1|p|SQUARE) +
+                              ar(time = YRnm, gr = REP_ID)) + 
+                         set_rescor(FALSE),
+                       data = mod_data, prior = mod_pr,
+                       cores = 4, iter = 4000, seed = 6856231456,
+                       file = "Outputs/Models/Difference/Test_fullmodhabv2_010421")
+summary(full_mod_hab)
+partition_fullmod <- util$partition_div(full_mod_hab_v2$fit)
+
+spline_vars <- grep("^s_Ell_sNdepYear1_pH",
+                    parnames(full_mod_hab_v2),
+                    value = TRUE)
+par(mfrow=c(3,3))
+for (i in 1:27){
+  name_x <- spline_vars[i]
+  plot(partition_fullmod[[2]][name_x][,1],
+       log(partition_fullmod[[2]][,"sds_Ell_sNdepYear1_pHManagementHigh_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+  points(partition_fullmod[[1]][name_x][,1], 
+         log(partition_fullmod[[1]]$sds_Ell_sNdepYear1_pHManagementHigh_1),
+         col=c_yellow_trans, pch=16)
+}
+for (i in 28:54){
+  name_x <- spline_vars[i]
+  plot(partition_fullmod[[2]][name_x][,1],
+       log(partition_fullmod[[2]][,"sds_Ell_sNdepYear1_pHManagementLow_1"]),
+       col=c_dark_trans, pch=16, main="",
+       ylab="log(sds_Ell_spline)", xlab = paste("Spline:",i))
+  points(partition_fullmod[[1]][name_x][,1], 
+         log(partition_fullmod[[1]]$sds_Ell_sNdepYear1_pHManagementLow_1),
+         col=c_yellow_trans, pch=16)
+}
+
+
 
 # ** No measurement error ####
 # ~~~ 200m2 weighted ####
@@ -3337,11 +3811,11 @@ mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
 
 mod_data_low <- filter(mod_data, Management == 0)
 mod_pr_test <- c(prior(normal(0,0.5), class = "b"),
-            prior(student_t(3, 0, 2.5), class = "sds"),
-            prior(normal(0,0.25), class = "Intercept"),
-            prior(normal(0,0.2), class = "ar"),
-            prior(student_t(3,0,0.5), class = "sd"),
-            prior(student_t(3,0,0.5), class = "sigma"))
+                 prior(student_t(3, 0, 2.5), class = "sds"),
+                 prior(normal(0,0.25), class = "Intercept"),
+                 prior(normal(0,0.2), class = "ar"),
+                 prior(student_t(3,0,0.5), class = "sd"),
+                 prior(student_t(3,0,0.5), class = "sigma"))
 ph_test_mod <- brm(PH|mi(PH_SE) ~ fieldseason_rain + s(Year1_pH, Ndep, Sdep) + 
                      ar(time = YRnm, gr = REP_ID) + (1|SQUARE), 
                    data = mod_data_low, prior = mod_pr_test, 
@@ -3380,7 +3854,7 @@ prior_mod <- brm(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, Ndep, Man
                       ar(time = YRnm, gr = REP_ID)) +
                    bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain + (1|p|SQUARE) +
                         ar(time = YRnm, gr = REP_ID)) + 
-                    set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                   set_rescor(FALSE), data = mod_data, prior = mod_pr,
                  sample_prior = "only", save_pars = save_pars(all = TRUE, latent = TRUE), 
                  cores = 4, iter = 5000)
 summary(prior_mod)
@@ -3474,16 +3948,16 @@ mod_data <- ELL_pH %>%
 
 # run model - full weighted Ell R
 full_mod_whw_nocor <- brm(bf(Ell | mi(ELL_SE)  ~ Management*mi(PH) + s(Year1_pH, Ndep) + 
-                         (1|SQUARE) +
-                         ar(time = YRnm, gr = REP_ID)) +
-                      bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain  + 
-                           s(Year1_pH, Ndep) +
-                           (1|SQUARE) +
-                           ar(time = YRnm, gr = REP_ID)) + 
-                      set_rescor(FALSE), data = mod_data, prior = mod_pr[1:11,],
-                    save_pars = save_pars(all = TRUE, latent = TRUE), 
-                    # file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_HAB",
-                    cores = 4, iter = 4000)
+                               (1|SQUARE) +
+                               ar(time = YRnm, gr = REP_ID)) +
+                            bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain  + 
+                                 s(Year1_pH, Ndep) +
+                                 (1|SQUARE) +
+                                 ar(time = YRnm, gr = REP_ID)) + 
+                            set_rescor(FALSE), data = mod_data, prior = mod_pr[1:11,],
+                          save_pars = save_pars(all = TRUE, latent = TRUE), 
+                          # file = "Outputs/Models/Difference/Multivariate_measerrorXYU/ELL_WHW_spl_PH_spl_HAB",
+                          cores = 4, iter = 4000)
 summary(full_mod_whw)
 plot(full_mod_whw, ask = FALSE)
 pp_check(full_mod_whw, nsamples = 50, resp = "Ell")
