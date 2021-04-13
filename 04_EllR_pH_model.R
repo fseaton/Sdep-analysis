@@ -6,6 +6,13 @@ library(ggplot2)
 theme_set(theme_classic())
 parallel:::setDefaultClusterOptions(setup_strategy = "sequential")
 
+util <- new.env()
+source('stan_utility.R', local=util)
+c_dark_trans <- "#80808080"
+c_yellow_trans <- "#FFFF0080"
+
+
+
 # taking PH_long and X_Ell from 01b script
 ph_ell_long <- full_join(X_Ell, PH_long) %>%
   filter(!Year %in% c(1990,2016)) %>%
@@ -1758,11 +1765,6 @@ plot(full_mod, pars = grep("^s_PH", parnames(full_mod), value = TRUE),
 plot(full_mod2, pars = parnames(full_mod2),
      window = c(0,750), chain = 3)
 
-util <- new.env()
-source('stan_utility.R', local=util)
-c_dark_trans <- "#80808080"
-c_yellow_trans <- "#FFFF0080"
-
 partition_fullmod <- util$partition_div(full_mod$fit)
 
 spline_vars <- grep("^s_PH_sSdepNdepYear1_pH_1",
@@ -2541,7 +2543,9 @@ full_mod_hab_v2 <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH)*Management + s(Ndep, Year1_p
                        data = mod_data, prior = mod_pr,
                        cores = 4, iter = 4000, seed = 6856231456,
                        file = "Outputs/Models/Difference/Test_fullmodhabv2_010421")
-summary(full_mod_hab)
+summary(full_mod_hab_v2)
+plot(conditional_smooths(full_mod_hab_v2, too_far = 0.1))
+
 partition_fullmod <- util$partition_div(full_mod_hab_v2$fit)
 
 spline_vars <- grep("^s_Ell_sNdepYear1_pH",
@@ -2568,6 +2572,48 @@ for (i in 28:54){
          log(partition_fullmod[[1]]$sds_Ell_sNdepYear1_pHManagementLow_1),
          col=c_yellow_trans, pch=16)
 }
+mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
+             prior(normal(0,0.5), class = "b", resp = "PH"),
+             prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
+             prior(normal(0,0.25), class = "Intercept", resp = "PH"),
+             prior(normal(2,0.5), class = "ar", resp = "Ell"),
+             prior(normal(2,0.5), class = "ar", resp = "PH"),
+             prior(student_t(3,0,1), class = "sd", resp = "Ell"),
+             prior(student_t(3,0,1), class = "sd", resp = "PH"),
+             prior(student_t(3,0,1), class = "sigma", resp = "Ell"),
+             prior(student_t(3,0,1), class = "sigma", resp = "PH"),
+             prior(student_t(3,0,5), class = "meanme", resp = "Ell"),
+             prior(student_t(3,0,5), class = "meanme", resp = "PH"),
+             prior(student_t(3,0,5), class = "sdme", resp = "Ell"),
+             prior(student_t(3,0,5), class = "sdme", resp = "PH"),
+             prior(lkj(5), class = "cor"))
+lin_mod_hab <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH)*Management + Ndep*Management + 
+                            (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
+                         bf(PH | mi(PH_SE)  ~ fieldseason_rain + Management*Sdep + 
+                              Management*Ndep*Year1_pH + 
+                              (1|p|SQUARE) +
+                              ar(time = YRnm, gr = REP_ID)) + 
+                         set_rescor(FALSE),
+                       data = mod_data, prior = mod_pr,
+                       cores = 4, iter = 5000, seed = 6856231456,
+                       file = "Outputs/Models/Difference/Test_linmodhab_130421")
+summary(lin_mod_hab)
+plot(conditional_effects(lin_mod_hab))
+
+
+# simplified linear
+lin_mod_hab2 <- brm(bf(Ell | mi(ELL_SE) ~ mi(PH)*Management + 
+                        (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) +
+                     bf(PH | mi(PH_SE)  ~ fieldseason_rain + Management*Sdep + 
+                          Management*Ndep + 
+                          (1|p|SQUARE) +
+                          ar(time = YRnm, gr = REP_ID)) + 
+                     set_rescor(FALSE),
+                   data = mod_data, prior = mod_pr,
+                   cores = 4, iter = 5000, seed = 6856231456,
+                   file = "Outputs/Models/Difference/Test_linmodhab2_130421")
+summary(lin_mod_hab2)
+plot(conditional_effects(lin_mod_hab2))
 
 
 
@@ -3788,10 +3834,10 @@ mod_data <- ELL_pH %>%
 
 
 # Habitat interaction
-get_prior(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, Ndep, Management) + 
+get_prior(bf(Ell | mi(ELL_SE) ~ Management*mi(PH) + s(Year1_pH, Ndep, by = Management) + 
                (1|p|SQUARE) +
                ar(time = YRnm, gr = REP_ID)) +
-            bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain + s(Year1_pH, Ndep, Management) +
+            bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain + s(Year1_pH, Ndep, by = Management) +
                  (1|p|SQUARE) + ar(time = YRnm, gr = REP_ID)) + 
             set_rescor(FALSE), data = mod_data)
 
