@@ -729,6 +729,122 @@ ggsave("pH against year with measurement error.png",
        path = "Outputs/Models/Year_models/",
        width = 20, height = 12, units = "cm")
 
+# Atmospheric deposition comparison ####
+# Calculate mean for each habitat type (high/low intensity management) for every year
+
+Sdep_avgs <- Sdep_year %>%
+  mutate(Habitat = recode(Cover, 
+                          "for" = "forest",
+                          "mor" = "moor")) %>%
+  right_join(CS_habs %>% select(REP_ID, Habitat) %>%
+               unique() %>%
+               mutate(Habitat = ifelse(
+                 REP_ID %in% janitor::get_dupes(unique(
+                   select(CS_habs, REP_ID, Habitat)),REP_ID)$REP_ID,
+                 "grd",Habitat)) %>%
+               unique(),
+             by = c("REPEAT_PLOT_ID" = "REP_ID",
+                    "Habitat")) %>%
+  left_join(BH_IMP %>% select(REP_ID, Management) %>%
+              unique() %>% na.omit() %>%
+              mutate(Management = ifelse(Management == "High",1,0)) %>%
+              group_by(REP_ID) %>%
+              summarise(Management = max(Management)),
+            by = c("REPEAT_PLOT_ID" = "REP_ID")) %>%
+  group_by(Management) %>%
+  summarise(across(`1970`:`2017`, .fns = list(mean, sd), na.rm = TRUE)) %>%
+  pivot_longer(`1970_1`:`2017_2`, names_to = c("Year","Stat"), 
+               values_to = "Sdep", names_sep = "_") %>%
+  mutate(Management = ifelse(Management == 1, "High",
+                             ifelse(Management == 0, "Low", NA)),
+         Stat = ifelse(Stat == "1", "Sdep", "sd"),
+         Year = as.numeric(Year)) %>%
+  pivot_wider(names_from = "Stat", values_from = "Sdep") %>%
+  mutate(SdepMeanPlusSD = Sdep + sd,
+         SdepMeanMinusSD = Sdep - sd,
+         SdepMeanPlusSE = Sdep + sd/sqrt(rep(c(9194,5780,6922),each = 48)),
+         SdepMeanMinusSE = Sdep - sd/sqrt(rep(c(9194,5780,6922),each = 48)))%>%
+  select(-sd)
+
+Ndep_avgs <- Ndep_year %>%
+  mutate(Habitat = recode(Cover, 
+                          "for" = "forest",
+                          "mor" = "moor")) %>%
+  right_join(CS_habs %>% select(REP_ID, Habitat) %>%
+               unique() %>%
+               mutate(Habitat = ifelse(
+                 REP_ID %in% janitor::get_dupes(unique(
+                   select(CS_habs, REP_ID, Habitat)),REP_ID)$REP_ID,
+                 "grd",Habitat)) %>%
+               unique(),
+             by = c("REPEAT_PLOT_ID" = "REP_ID",
+                    "Habitat")) %>%
+  left_join(BH_IMP %>% select(REP_ID, Management) %>%
+              unique() %>% na.omit() %>%
+              mutate(Management = ifelse(Management == "High",1,0)) %>%
+              group_by(REP_ID) %>%
+              summarise(Management = max(Management)),
+            by = c("REPEAT_PLOT_ID" = "REP_ID")) %>%
+  group_by(Management) %>%
+  summarise(across(`1970`:`2017`, .fns = list(mean, sd), na.rm = TRUE)) %>%
+  pivot_longer(`1970_1`:`2017_2`, names_to = c("Year","Stat"), 
+               values_to = "Ndep", names_sep = "_") %>%
+  mutate(Management = ifelse(Management == 1, "High",
+                             ifelse(Management == 0, "Low", NA)),
+         Stat = ifelse(Stat == "1", "Ndep", "sd"),
+         Year = as.numeric(Year)) %>%
+  pivot_wider(names_from = "Stat", values_from = "Ndep") %>%
+  mutate(NdepMeanPlusSD = Ndep + sd,
+         NdepMeanMinusSD = Ndep - sd,
+         NdepMeanPlusSE = Ndep + sd/sqrt(rep(c(9194,5780,6922),each = 48)),
+         NdepMeanMinusSE = Ndep - sd/sqrt(rep(c(9194,5780,6922),each = 48))) %>%
+  select(-sd)
+
+Atdep_avgs <- full_join(Sdep_avgs, Ndep_avgs) %>%
+  na.omit()
+
+(sdep_pl <- ggplot(na.omit(Atdep_avgs), aes(x = Year,
+                                            fill = Management)) +
+    geom_line(aes(y = Sdep, colour = Management)) +
+    # geom_ribbon(aes(ymin = SdepMeanMinusSE, ymax = SdepMeanPlusSE),
+    #             alpha = 1) +
+    geom_ribbon(aes(ymin = SdepMeanMinusSD, ymax = SdepMeanPlusSD),
+                alpha = 0.25) +
+    labs(y = expression("S deposition (kg S ha"^-1*")")) +
+    scale_y_continuous(limits = c(0,60), expand = c(0,0)) +
+    theme(legend.position = "none"))
+
+(ndep_pl <- ggplot(na.omit(Atdep_avgs), aes(x = Year, fill = Management)) +
+    geom_line(aes(y = Ndep, colour = Management)) +
+    # geom_ribbon(aes(ymin = NdepMeanMinusSE, ymax = NdepMeanPlusSE),
+    #             alpha = 1) +
+    geom_ribbon(aes(ymin = NdepMeanMinusSD, ymax = NdepMeanPlusSD),
+                alpha = 0.25) +
+    labs(y = expression("N deposition (kg N ha"^-1*")")) +
+    scale_y_continuous(limits = c(0,30), expand = c(0,0)) +
+    theme(legend.position = "none"))
+
+
+Atdep_avgs %>%
+  select(Management:Ndep) %>%
+  pivot_longer(Sdep:Ndep,
+               names_to = "Deposition",
+               values_to ="Value") %>%
+  ggplot(aes(x = Year, y = Value, colour = Management,
+             linetype = Deposition)) +
+  geom_line()
+
+library(patchwork)
+wh_uw + labs(y = "Ellenberg R") + scale_y_continuous() +
+  ph_pl + sdep_pl + ndep_pl +
+  plot_layout(ncol = 2, guides = "collect") +
+  plot_annotation(tag_levels = "a") &
+  scale_x_continuous(limits = c(1970,2020), expand = c(0,0)) &
+  theme(plot.margin = margin(5.5,10,5.5,5.5)) 
+ggsave("Change in Ell R wh_uw pH Sdep and Ndep over time with labels.png",
+       path = "Outputs/Models/Year_Models/",
+       width = 15, height = 10, units = "cm", scale = 1.25)
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~ ####
 # pH against rainfall ####
 str(Comb)

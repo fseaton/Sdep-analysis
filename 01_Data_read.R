@@ -4,8 +4,8 @@ library(readxl)
 library(dplyr)
 
 # atmospheric deposition data
-Sdep_year <- fread("~/NS_Dep_CS_Data/CS_tot_S_dep_1970_2017_kgS_ha.csv")
-Ndep_year <- fread("~/NS_Dep_CS_Data/CS_tot_N_dep_1970_2017_kgN_ha.csv")
+Sdep_year <- fread("~/Data/NS_Dep_CS_Data/CS_tot_S_dep_1970_2017_kgS_ha.csv")
+Ndep_year <- fread("~/Data/NS_Dep_CS_Data/CS_tot_N_dep_1970_2017_kgN_ha.csv")
 
 ## get data on species characteristics from CS database
 pwds <- read.csv("Outputs/pwd.csv")
