@@ -4059,7 +4059,7 @@ mod_whw <- brm(bf(Ell | mi(ELL_SE)  ~ Management*mi(PH) +
                       set_rescor(FALSE), data = mod_data, prior = mod_pr,
                     save_pars = save_pars(all = TRUE, latent = TRUE), 
                     file = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/ELL_WHW_PH_HAB",
-                    cores = 4, iter = 5000)
+                    cores = 4, iter = 20000, thin = 4)
 summary(mod_whw)
 plot(mod_whw)
 pp_check(mod_whw, nsamples = 50, resp = "Ell")
@@ -4096,6 +4096,20 @@ ggsave("Residuals by habitat whole weighted model.png",
        path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models",
        width = 12, height = 18, units = "cm")
 
+mod_whw_ns <- mod_whw <- brm(bf(Ell | mi(ELL_SE)  ~ Management*mi(PH) +
+                                  Management*Sdep + Management*Ndep +
+                                  (1|p|SQUARE) +
+                                  ar(time = YRnm, gr = REP_ID)) +
+                               bf(PH | mi(PH_SE)  ~ Management*Sdep + fieldseason_rain  + 
+                                    Management*Ndep + Year1_pH +
+                                    (1|p|SQUARE) +
+                                    ar(time = YRnm, gr = REP_ID)) + 
+                               set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                             save_pars = save_pars(all = TRUE, latent = TRUE), 
+                             file = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/ELL_NS_WHW_PH_HAB",
+                             cores = 4, iter = 20000, thin = 4)
+summary(mod_whw_ns)
+plot(mod_whw_ns)
 
 # ~~~ 200m2 unweighted ####
 mod_data <- ELL_pH %>%
@@ -4117,7 +4131,7 @@ mod_data <- ELL_pH %>%
 # Habitat interaction
 # run model - full unweighted Ell R
 mod_whuw <- update(mod_whw, newdata = mod_data,
-                   cores = 4, iter = 5000,
+                   cores = 4, iter = 20000, thin = 4,
                    file = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/ELL_WHUW_PH_HAB")
 
 summary(mod_whuw)
@@ -4153,6 +4167,13 @@ ggsave("Residuals by habitat whole unweighted model.png",
        path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/",
        width = 12, height = 18, units = "cm")
 
+mod_whuw_ns <- update(mod_whw_ns, newdata = mod_data,
+                      cores = 4, iter = 20000, thin = 4,
+                      file = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/ELL_NS_WHUW_PH_HAB")
+
+summary(mod_whuw_ns)
+plot(mod_whuw_ns, ask = FALSE)
+
 
 # ~~~ 4m2 weighted ####
 mod_data <- ELL_pH %>%
@@ -4174,7 +4195,7 @@ mod_data <- ELL_pH %>%
 # Habitat interaction
 # run model - small weighted Ell R
 mod_smw <- update(mod_whw, newdata = mod_data,
-                  cores = 4, iter = 5000,
+                  cores = 4, iter = 20000, thin = 4,
                   file = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/ELL_SMW_PH_HAB")
 
 summary(mod_smw)
@@ -4209,6 +4230,13 @@ ggsave("Residuals by habitat small weighted full model.png",
        path = "Outputs/Models/Difference/Multivariate_measerrorXYU",
        width = 12, height = 18, units = "cm")
 
+mod_smw_ns <- update(mod_whw_ns, newdata = mod_data,
+                      cores = 4, iter = 20000, thin = 4,
+                      file = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/ELL_NS_SMW_PH_HAB")
+
+summary(mod_smw_ns)
+plot(mod_smw_ns, ask = FALSE)
+
 # ~~~ 4m2 unweighted ####
 mod_data <- ELL_pH %>%
   filter(!is.na(Management)) %>%
@@ -4229,7 +4257,7 @@ mod_data <- ELL_pH %>%
 # Habitat interaction
 # run model - small unweighted Ell R
 mod_smuw <- update(mod_whw, newdata = mod_data,
-                   cores = 4, iter = 5000,
+                   cores = 4, iter = 20000, thin = 4,
                    file = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/ELL_SMUW_PH_HAB")
 
 summary(mod_smuw)
@@ -4266,6 +4294,56 @@ ggsave("Residuals by habitat small unweighted model.png",
        width = 12, height = 18, units = "cm")
 
 
+mod_smuw_ns <- update(mod_whw_ns, newdata = mod_data,
+                      cores = 4, iter = 20000, thin = 4,
+                      file = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/ELL_NS_SMUW_PH_HAB")
+summary(mod_smuw_ns)
+plot(mod_smuw_ns, ask = FALSE)
+
+
+# Kfold ####
+options(future.globals.maxSize = 10e8)
+library(future)
+plan(multiprocess)
+
+mods_list <- list.files(path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/",
+                        pattern = ".rds$")
+
+for (i in 1:length(mods_list)){
+  mod <- readRDS(mods_list[i])
+  
+  filename <- gsub(".rds","",mods_list[i])
+  
+  mod <- update(mod, cores = 4, iter = 20000, thin = 4,
+                seed = 39099630)
+  
+  mod <- add_criterion(mod, "kfold", group = "SQUARE",
+                       folds = "grouped",
+                       file = filename, overwrite = TRUE)
+  
+}
+
+
+loo_compare(mod_whw, mod_whw_ns, criterion = "kfold")
+# elpd_diff se_diff
+# mod_whw      0.0       0.0  
+# mod_whw_ns -21.5       8.7  
+
+
+loo_compare(mod_whuw, mod_whuw_ns, criterion = "kfold")
+# elpd_diff se_diff
+# mod_whuw_ns   0.0       0.0  
+# mod_whuw    -34.4      15.9  
+
+loo_compare(mod_smw, mod_smw_ns, criterion = "kfold")
+# elpd_diff se_diff
+# mod_smw_ns   0.0       0.0  
+# mod_smw    -20.4      10.7  
+
+loo_compare(mod_smuw, mod_smuw_ns, criterion = "kfold")
+# elpd_diff se_diff
+# mod_smuw     0.0       0.0   
+# mod_smuw_ns -7.1      11.5   
 
 # Summary plots ####
 # Plot for comparing initial pH effects on pH change
@@ -4408,9 +4486,8 @@ ggsave("Sdep effect on pH with data measerror unscaled.png",
        path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/", 
        width = 16, height = 10, units = "cm")
 
-# mean and prediction error
-f2 <- do.call(rbind, list(
-  posterior_predict(mod_whw, newdata = nd, re_formula = NA, resp = "PH") %>%
+# mean and prediction error - small unweighted only
+f2 <- posterior_predict(mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     summarise(across(.fns = list(Estimate = mean,
                                  Q2.5 = ~quantile(.x, probs = 0.025),
@@ -4419,46 +4496,13 @@ f2 <- do.call(rbind, list(
                  names_sep = "_") %>%
     pivot_wider(names_from = "Metric", values_from = "value") %>%
     bind_cols(nd) %>%
-    mutate(Response = "Weighted full"),
-  posterior_predict(mod_whuw, newdata = nd, re_formula = NA, resp = "PH") %>%
-    as_tibble() %>%
-    summarise(across(.fns = list(Estimate = mean,
-                                 Q2.5 = ~quantile(.x, probs = 0.025),
-                                 Q97.5 = ~quantile(.x, probs = 0.975)))) %>%
-    pivot_longer(everything(), names_to = c("ID","Metric"),
-                 names_sep = "_") %>%
-    pivot_wider(names_from = "Metric", values_from = "value") %>%
-    bind_cols(nd) %>%
-    mutate(Response = "Unweighted full"),
-  posterior_predict(mod_smw, newdata = nd, re_formula = NA, resp = "PH") %>%
-    as_tibble() %>%
-    summarise(across(.fns = list(Estimate = mean,
-                                 Q2.5 = ~quantile(.x, probs = 0.025),
-                                 Q97.5 = ~quantile(.x, probs = 0.975)))) %>%
-    pivot_longer(everything(), names_to = c("ID","Metric"),
-                 names_sep = "_") %>%
-    pivot_wider(names_from = "Metric", values_from = "value") %>%
-    bind_cols(nd) %>%
-    mutate(Response = "Weighted small"),
-  posterior_predict(mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
-    as_tibble() %>%
-    summarise(across(.fns = list(Estimate = mean,
-                                 Q2.5 = ~quantile(.x, probs = 0.025),
-                                 Q97.5 = ~quantile(.x, probs = 0.975)))) %>%
-    pivot_longer(everything(), names_to = c("ID","Metric"),
-                 names_sep = "_") %>%
-    pivot_wider(names_from = "Metric", values_from = "value") %>%
-    bind_cols(nd) %>%
-    mutate(Response = "Unweighted small")
-)) %>%
-  mutate(
+    mutate(Response = "Unweighted small",
     Management = ifelse(Management == "High", "High intensity", "Low intensity"),
-    Sdep = 3.818393*Sdep - 4.769306
-  )
-plot_dat %>%
+    Sdep = 3.818393*Sdep - 4.769306)
+pl_1 <- plot_dat %>%
   ggplot() +
-  geom_point(aes(x = Sdep, y = PH, colour = Management),
-             alpha = 0.1) +
+  # geom_point(aes(x = Sdep, y = PH, colour = Management),
+  #            alpha = 0.1) +
   geom_hline(yintercept = 0, colour = "gray") +
   geom_ribbon(data = f2,
               aes(x = Sdep,
@@ -4467,16 +4511,16 @@ plot_dat %>%
                   group = Management),
               stat = "identity", 
               alpha = 1/4) +
-  geom_smooth(data = f,
+  geom_smooth(data = filter(f, Response == "Unweighted small"),
               aes(x = Sdep,
                   y = Estimate, ymin = Q2.5, ymax = Q97.5,
                   fill = Management, color = Management,
                   group = Management),
               stat = "identity", 
               alpha = 1/2, size = 1/2) +
-  facet_wrap(~Response) +
   labs(x = "S deposition", y = "pH change") +
   scale_x_continuous(expand = c(0,0))
+
 
 # Plot for comparing Ndep effects on pH change
 nd <- 
@@ -4549,6 +4593,42 @@ plot_dat %>%
 ggsave("Ndep effect on pH with data measerror unscaled.png",
        path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/", 
        width = 16, height = 10, units = "cm")
+
+
+# mean and prediction error - small unweighted only
+f2 <- posterior_predict(mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  as_tibble() %>%
+  summarise(across(.fns = list(Estimate = mean,
+                               Q2.5 = ~quantile(.x, probs = 0.025),
+                               Q97.5 = ~quantile(.x, probs = 0.975)))) %>%
+  pivot_longer(everything(), names_to = c("ID","Metric"),
+               names_sep = "_") %>%
+  pivot_wider(names_from = "Metric", values_from = "value") %>%
+  bind_cols(nd) %>%
+  mutate(Response = "Unweighted small",
+         Management = ifelse(Management == "High", "High intensity", "Low intensity"),
+         Ndep = 70.08984*Ndep + 138.8274)
+pl_2 <- plot_dat %>%
+  ggplot() +
+  # geom_point(aes(x = Sdep, y = PH, colour = Management),
+  #            alpha = 0.1) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_ribbon(data = f2,
+              aes(x = Ndep,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, 
+                  group = Management),
+              stat = "identity", 
+              alpha = 1/4) +
+  geom_smooth(data = filter(f, Response == "Unweighted small"),
+              aes(x = Ndep,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management,
+                  group = Management),
+              stat = "identity", 
+              alpha = 1/2, size = 1/2) +
+  labs(x = "N deposition", y = "pH change") +
+  scale_x_continuous(expand = c(0,0))
 
 # Plot for comparing pH change on Ellenberg R change
 nd <- 
@@ -4631,3 +4711,110 @@ ggsave("pH change effect on Ellenberg R with data measerror.png",
        path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models", 
        width = 20, height = 10, units = "cm")
 
+
+# Parameter estimates
+mcmc_plot(mod_whw, type = "areas_ridges") + 
+  ggtitle(expression("Cover weighted Ellenberg R 200m"^2)) + 
+  mcmc_plot(mod_whuw, type = "areas_ridges") + theme(axis.text.y = element_blank())+
+  ggtitle(expression("Unweighted Ellenberg R 200m"^2)) +
+  mcmc_plot(mod_smw, type = "areas_ridges") + 
+  ggtitle(expression("Cover weighted Ellenberg R 4m"^2)) +
+  mcmc_plot(mod_smuw, type = "areas_ridges") + theme(axis.text.y = element_blank()) +
+  ggtitle(expression("Unweighted Ellenberg R 4m"^2)) 
+
+ggsave("Parameter estimates bayesplot.png", 
+       path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/",
+       width = 24, height = 14, units = "cm", scale = 1.2)
+
+
+mcmc_plot(mod_whw, type = "areas_ridges") +
+  ggtitle(expression("Cover weighted Ellenberg R 200m"^2)) +
+  mcmc_plot(mod_whuw, type = "areas_ridges") +
+  ggtitle(expression("Unweighted Ellenberg R 200m"^2)) +
+  mcmc_plot(mod_smw, type = "areas_ridges") +
+  ggtitle(expression("Cover weighted Ellenberg R 4m"^2)) +
+  mcmc_plot(mod_smuw, type = "areas_ridges") +
+  ggtitle(expression("Unweighted Ellenberg R 4m"^2))  + plot_layout(ncol = 1)
+
+ggsave("Parameter estimates bayesplot tall.png", 
+       path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/",
+       width = 10, height = 20, units = "cm", scale = 1.5)
+
+plot_pars <- c(parnames(mod_whw)[1:21],"ar_PH","ar_Ell")
+param_summaries <- do.call(rbind, list(
+  posterior_summary(mod_whw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "WH_W"),
+  posterior_summary(mod_whuw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "WH_UW"),
+  posterior_summary(mod_smw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "SM_W"),
+  posterior_summary(mod_smuw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "SM_UW")
+)) 
+write.csv(param_summaries, 
+          "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/Parameter_summary_table.csv",
+          row.names = FALSE)
+
+param_summaries <- param_summaries %>% 
+  mutate(across(Estimate:Q97.5, round, 3)) %>%
+  mutate(CI = paste0(Q2.5, " - ", Q97.5),
+         Estimate = as.character(Estimate)) %>%
+  select(-Est.Error, -Q2.5, -Q97.5) %>%
+  pivot_longer(c(Estimate,CI)) %>%
+  pivot_wider(names_from = c(Model, name), names_sep = "__") %>%
+  mutate(across(ends_with("Estimate"),as.numeric))
+writexl::write_xlsx(param_summaries, 
+                    "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/Parameter_summary_nicetable.xlsx")
+
+
+# NS as Ellenberg predictors
+mcmc_plot(mod_whw_ns, type = "areas_ridges") + 
+  ggtitle(expression("Cover weighted Ellenberg R 200m"^2)) + 
+  mcmc_plot(mod_whuw_ns, type = "areas_ridges") + theme(axis.text.y = element_blank())+
+  ggtitle(expression("Unweighted Ellenberg R 200m"^2)) +
+  mcmc_plot(mod_smw_ns, type = "areas_ridges") + 
+  ggtitle(expression("Cover weighted Ellenberg R 4m"^2)) +
+  mcmc_plot(mod_smuw_ns, type = "areas_ridges") + theme(axis.text.y = element_blank()) +
+  ggtitle(expression("Unweighted Ellenberg R 4m"^2)) 
+
+ggsave("Parameter estimates Ell_NS models bayesplot.png", 
+       path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/",
+       width = 24, height = 14, units = "cm", scale = 1.3)
+
+
+plot_pars <- c(parnames(mod_whw_ns)[1:25],"ar_PH","ar_Ell")
+param_summaries <- do.call(rbind, list(
+  posterior_summary(mod_whw_ns, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "WH_W"),
+  posterior_summary(mod_whuw_ns, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "WH_UW"),
+  posterior_summary(mod_smw_ns, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "SM_W"),
+  posterior_summary(mod_smuw_ns, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "SM_UW")
+)) %>% 
+  mutate(across(Estimate:Q97.5, round, 3)) %>%
+  mutate(CI = paste0(Q2.5, " - ", Q97.5),
+         Estimate = as.character(Estimate)) %>%
+  select(-Est.Error, -Q2.5, -Q97.5) %>%
+  pivot_longer(c(Estimate,CI)) %>%
+  pivot_wider(names_from = c(Model, name), names_sep = "__") %>%
+  mutate(across(ends_with("Estimate"),as.numeric))
+writexl::write_xlsx(param_summaries, 
+                    "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/Parameter_summary_nsmodel_nicetable.xlsx")
