@@ -2729,153 +2729,94 @@ mod_data <- ELL_pH %>%
 
 # Multivariate with N as a 2D spline
 # Habitat interaction
-get_prior(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
-               (1|SQUARE) +
+get_prior(bf(Ell  ~ Management*PH + 
+               Management*Ndep + Management*Sdep +
+               (1|p|SQUARE) +
                ar(time = YRnm, gr = REP_ID)) +
-            bf(PH  ~ Management*Sdep + fieldseason_rain + (1|SQUARE) +
+            bf(PH  ~ Management*Sdep + fieldseason_rain + 
+                 Management*Ndep + Year1_pH +
+                 (1|p|SQUARE) +
                  ar(time = YRnm, gr = REP_ID)) + 
-            bf(N ~ Ndep + (1|SQUARE) +
-                 ar(time = YRnm, gr = REP_ID)) +
             set_rescor(FALSE), data = mod_data)
 
 
 mod_pr <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
             prior(normal(0,0.5), class = "b", resp = "PH"),
-            prior(normal(0,0.5), class = "b", resp = "N"),
-            prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
-            prior(student_t(3, 0, 2.5), class = "sds", resp = "PH"),
             prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
             prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-            prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-            prior(normal(0,0.2), class = "ar", resp = "Ell"),
-            prior(normal(0,0.2), class = "ar", resp = "PH"),
-            prior(normal(0,0.2), class = "ar", resp = "N"),
-            prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
-            prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
-            prior(student_t(3,0,0.5), class = "sd", resp = "N"),
-            prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
-            prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
-            prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
+            prior(normal(2,0.5), class = "ar", resp = "Ell"),
+            prior(normal(2,0.5), class = "ar", resp = "PH"),
+            prior(student_t(3,0,1), class = "sd", resp = "Ell"),
+            prior(student_t(3,0,1), class = "sd", resp = "PH"),
+            prior(student_t(3,0,1), class = "sigma", resp = "Ell"),
+            prior(student_t(3,0,1), class = "sigma", resp = "PH"),
+            prior(lkj(5), class = "cor"))
 
 
 # prior simulation
-prior_mod <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
-                      (1|SQUARE) +
+prior_mod <- brm(bf(Ell  ~ Management*PH + 
+                      Management*Ndep + Management*Sdep +
+                      (1|p|SQUARE) +
                       ar(time = YRnm, gr = REP_ID)) +
-                   bf(PH  ~ Management*Sdep + fieldseason_rain  + s(Year1_pH, N, Management) +
-                        (1|SQUARE) +
+                   bf(PH  ~ Management*Sdep + fieldseason_rain + 
+                        Management*Ndep + Year1_pH +
+                        (1|p|SQUARE) +
                         ar(time = YRnm, gr = REP_ID)) + 
-                   bf(N ~ Ndep + (1|SQUARE) +
-                        ar(time = YRnm, gr = REP_ID))  +
                    set_rescor(FALSE), data = mod_data, prior = mod_pr,
                  sample_prior = "only", save_pars = save_pars(all = TRUE, latent = TRUE), 
                  cores = 4, iter = 5000)
 summary(prior_mod)
 pp_check(prior_mod, nsamples = 50, resp = "Ell")
 pp_check(prior_mod, nsamples = 50, resp = "PH")
-pp_check(prior_mod, nsamples = 50, resp = "N") 
 plot(conditional_effects(prior_mod))
 
 # run model - full weighted Ell R
-full_mod_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N) + 
-                         (1|SQUARE) +
-                         ar(time = YRnm, gr = REP_ID)) +
-                      bf(PH  ~ Management*Sdep + fieldseason_rain  + 
-                           s(Year1_pH, N) +
-                           (1|SQUARE) +
-                           ar(time = YRnm, gr = REP_ID)) + 
-                      bf(N ~ Ndep + (1|SQUARE) +
-                           ar(time = YRnm, gr = REP_ID)) +
-                      set_rescor(FALSE), data = mod_data, prior = mod_pr,
-                    file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_spl_N_HAB",
-                    cores = 4, iter = 4000, control = list(adapt_delta = 0.95))
-summary(full_mod_whw)
-plot(full_mod_whw, ask = FALSE)
-pp_check(full_mod_whw, nsamples = 50, resp = "Ell")
-pp_check(full_mod_whw, nsamples = 50, resp = "PH")
-pp_check(full_mod_whw, nsamples = 50, resp = "N")
+mod_whw <- brm(bf(Ell  ~ Management*PH + 
+                    (1|p|SQUARE) +
+                    ar(time = YRnm, gr = REP_ID)) +
+                 bf(PH  ~ Management*Sdep + fieldseason_rain + 
+                      Management*Ndep + Year1_pH +
+                      (1|p|SQUARE) +
+                      ar(time = YRnm, gr = REP_ID)) + 
+                 set_rescor(FALSE), data = mod_data, prior = mod_pr,
+               save_pars = save_pars(all = TRUE, latent = TRUE), 
+               iter = 20000, thin = 4, seed = 39099630,
+               file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_WHW_PH_HAB",
+               cores = 4)
+summary(mod_whw)
+plot(mod_whw)
 
-# plot(conditional_effects(full_mod_whw))
+mod_n_whw <- brm(bf(Ell  ~ Management*PH + 
+                      Management*Ndep + 
+                      (1|p|SQUARE) +
+                      ar(time = YRnm, gr = REP_ID)) +
+                   bf(PH  ~ Management*Sdep + fieldseason_rain + 
+                        Management*Ndep + Year1_pH +
+                        (1|p|SQUARE) +
+                        ar(time = YRnm, gr = REP_ID)) + 
+                   set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                 save_pars = save_pars(all = TRUE, latent = TRUE), 
+                 iter = 20000, thin = 4, seed = 39099630,
+                 file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_N_WHW_PH_HAB",
+                 cores = 4)
+summary(mod_n_whw)
+plot(mod_n_whw)
 
-# No pH ~ N spline
-mod_pr_red1 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
-                 prior(normal(0,0.5), class = "b", resp = "PH"),
-                 prior(normal(0,0.5), class = "b", resp = "N"),
-                 prior(student_t(3, 0, 2.5), class = "sds", resp = "Ell"),
-                 prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
-                 prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-                 prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-                 prior(normal(0,0.2), class = "ar", resp = "Ell"),
-                 prior(normal(0,0.2), class = "ar", resp = "PH"),
-                 prior(normal(0,0.2), class = "ar", resp = "N"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "N"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
-
-red_mod_1_whw <- brm(bf(Ell  ~ Management*PH + s(Year1_pH, N) + 
-                          (1|SQUARE) +
-                          ar(time = YRnm, gr = REP_ID),
-                        family = "student") +
-                       bf(PH  ~ Management*Sdep + fieldseason_rain +
-                            (1|SQUARE) +
-                            ar(time = YRnm, gr = REP_ID), family = "student") + 
-                       bf(N ~ Ndep + (1|SQUARE) +
-                            ar(time = YRnm, gr = REP_ID)) +
-                       set_rescor(FALSE), data = mod_data, prior = mod_pr_red1,
-                     file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_spl_PH_N_HAB",
-                     cores = 4, iter = 4000, control = list(adapt_delta = 0.99))
-summary(red_mod_1_whw)
-plot(red_mod_1_whw, ask = FALSE)
-pp_check(red_mod_1_whw, nsamples = 50, resp = "Ell")
-pp_check(red_mod_1_whw, nsamples = 50, resp = "PH")
-pp_check(red_mod_1_whw, nsamples = 50, resp = "N")
-
-# plot(conditional_effects(red_mod_1_whw))
-
-# No Ell ~ N spline
-mod_pr_red2 <- c(prior(normal(0,0.5), class = "b", resp = "Ell"),
-                 prior(normal(0,0.5), class = "b", resp = "PH"),
-                 prior(normal(0,0.5), class = "b", resp = "N"),
-                 prior(normal(0,0.25), class = "Intercept", resp = "Ell"),
-                 prior(normal(0,0.25), class = "Intercept", resp = "PH"),
-                 prior(student_t(3,0,1), class = "Intercept", resp = "N"),
-                 prior(normal(0,0.2), class = "ar", resp = "Ell"),
-                 prior(normal(0,0.2), class = "ar", resp = "PH"),
-                 prior(normal(0,0.2), class = "ar", resp = "N"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "Ell"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sd", resp = "N"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "Ell"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "PH"),
-                 prior(student_t(3,0,0.5), class = "sigma", resp = "N"))
-red_mod_2_whw <- brm(bf(Ell  ~ Management*PH + 
-                          (1|SQUARE) +
-                          ar(time = YRnm, gr = REP_ID)) +
-                       bf(PH  ~ Management*Sdep + fieldseason_rain +
-                            (1|SQUARE) +
-                            ar(time = YRnm, gr = REP_ID)) + 
-                       bf(N ~ Ndep + (1|SQUARE) +
-                            ar(time = YRnm, gr = REP_ID)) +
-                       set_rescor(FALSE), data = mod_data, prior = mod_pr_red2,
-                     file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHW_PH_N_HAB",
-                     cores = 4, iter = 4000, control = list(adapt_delta = 0.95))
-summary(red_mod_2_whw)
-plot(red_mod_2_whw, ask = FALSE)
-pp_check(red_mod_2_whw, nsamples = 50, resp = "Ell")
-pp_check(red_mod_2_whw, nsamples = 50, resp = "PH")
-pp_check(red_mod_2_whw, nsamples = 50, resp = "N")
-
-# plot(conditional_effects(red_mod_2_whw))
-
-loo_compare(full_mod_whw, red_mod_1_whw, red_mod_2_whw, criterion = "kfold")
-# elpd_diff se_diff
-# red_mod_1_whw    0.0       0.0 
-# full_mod_whw   -24.3      33.5 
-# red_mod_2_whw -163.3      31.5  
-
+mod_ns_whw <- brm(bf(Ell  ~ Management*PH + 
+                       Management*Ndep + Management*Sdep +
+                       (1|p|SQUARE) +
+                       ar(time = YRnm, gr = REP_ID)) +
+                    bf(PH  ~ Management*Sdep + fieldseason_rain + 
+                         Management*Ndep + Year1_pH +
+                         (1|p|SQUARE) +
+                         ar(time = YRnm, gr = REP_ID)) + 
+                    set_rescor(FALSE), data = mod_data, prior = mod_pr,
+                  save_pars = save_pars(all = TRUE, latent = TRUE), 
+                  iter = 20000, thin = 4, seed = 39099630,
+                  file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_NS_WHW_PH_HAB",
+                  cores = 4)
+summary(mod_ns_whw)
+plot(mod_ns_whw)
 
 # ~~~ 200m2 unweighted ####
 mod_data <- ELL_pH %>%
@@ -2885,65 +2826,33 @@ mod_data <- ELL_pH %>%
          Ell = WH_R_UW) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO) %>%
+         PH_SE = PH_DIW_SE_NORM,
+         ELL_SE = ELL_WH_UW_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
          Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
-         N = as.numeric(scale(N)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
 
-# Multivariate with N as a 2D spline
-# Habitat interaction
 # run model - full unweighted Ell R
-full_mod_whuw <- update(full_mod_whw, newdata = mod_data,
-                        control = list(adapt_delta = 0.95),
-                        cores = 4, iter = 4000,
-                        file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_spl_N_HAB")
+mod_whuw <- update(mod_whw, newdata = mod_data,
+                   cores = 4, iter = 20000, thin = 4, seed = 39099630,
+                   file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_WHUW_PH_HAB")
+summary(mod_whuw)
+plot(mod_whuw)
 
-summary(full_mod_whuw)
-plot(full_mod_whuw, ask = FALSE)
-pp_check(full_mod_whuw, nsamples = 50, resp = "Ell")
-pp_check(full_mod_whuw, nsamples = 50, resp = "PH")
-pp_check(full_mod_whuw, nsamples = 50, resp = "N")
+mod_n_whuw <- update(mod_n_whw, newdata = mod_data,
+                     cores = 4, iter = 20000, thin = 4, seed = 39099630,
+                     file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_N_WHUW_PH_HAB")
+summary(mod_n_whuw)
+plot(mod_n_whuw)
 
-# plot(conditional_effects(full_mod_whuw))
-
-
-# No pH ~ N spline
-red_mod_1_whuw <- update(red_mod_1_whw, newdata = mod_data,
-                         cores = 4, iter = 4000,
-                         control = list(adapt_delta = 0.99),
-                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_spl_PH_N_HAB")
-
-summary(red_mod_1_whuw)
-plot(red_mod_1_whuw, ask = FALSE)
-pp_check(red_mod_1_whuw, nsamples = 50, resp = "Ell")
-pp_check(red_mod_1_whuw, nsamples = 50, resp = "PH")
-pp_check(red_mod_1_whuw, nsamples = 50, resp = "N")
-
-# plot(conditional_effects(red_mod_1_whuw))
-
-# No Ell ~ N spline
-red_mod_2_whuw <- update(red_mod_2_whw, newdata = mod_data,
-                         cores = 4, iter = 4000,
-                         control = list(adapt_delta = 0.95),
-                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_WHUW_PH_N_HAB")
-
-summary(red_mod_2_whuw)
-plot(red_mod_2_whuw, ask = FALSE)
-pp_check(red_mod_2_whuw, nsamples = 50, resp = "Ell")
-pp_check(red_mod_2_whuw, nsamples = 50, resp = "PH")
-pp_check(red_mod_2_whuw, nsamples = 50, resp = "N")
-
-# plot(conditional_effects(red_mod_2_whuw))
-loo_compare(full_mod_whuw, red_mod_1_whuw, red_mod_2_whuw,
-            criterion = "kfold")
-# elpd_diff se_diff
-# red_mod_1_whuw    0.0       0.0 
-# full_mod_whuw  -127.3      44.2 
-# red_mod_2_whuw -187.3      44.4
+mod_ns_whuw <- update(mod_ns_whw, newdata = mod_data,
+                      cores = 4, iter = 20000, thin = 4, seed = 39099630,
+                      file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_NS_WHUW_PH_HAB")
+summary(mod_ns_whuw)
+plot(mod_ns_whuw)
 
 # ~~~ 4m2 weighted ####
 mod_data <- ELL_pH %>%
@@ -2953,65 +2862,36 @@ mod_data <- ELL_pH %>%
          Ell = SM_R_W) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO) %>%
+         PH_SE = PH_DIW_SE_NORM,
+         ELL_SE = ELL_SM_W_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
          Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
-         N = as.numeric(scale(N)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
 
 # Multivariate with N as a 2D spline
 # Habitat interaction
 # run model - small weighted Ell R
-full_mod_smw <- update(full_mod_whw, newdata = mod_data,
-                       cores = 4, iter = 4000,
-                       control = list(adapt_delta = 0.95),
-                       file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_spl_N_HAB")
+mod_smw <- update(mod_whw, newdata = mod_data,
+                  cores = 4, iter = 20000, thin = 4, seed = 39099630,
+                  file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_SMW_PH_HAB")
+summary(mod_smw)
+plot(mod_smw)
 
-summary(full_mod_smw)
-plot(full_mod_smw, ask = FALSE)
-pp_check(full_mod_smw, nsamples = 50, resp = "Ell")
-pp_check(full_mod_smw, nsamples = 50, resp = "PH")
-pp_check(full_mod_smw, nsamples = 50, resp = "N")
+mod_n_smw <- update(mod_n_whw, newdata = mod_data,
+                    cores = 4,  iter = 20000, thin = 4, seed = 39099630,
+                    file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_N_SMW_PH_HAB")
+summary(mod_n_smw)
+plot(mod_n_smw)
 
-# plot(conditional_effects(full_mod_smw))
+mod_ns_smw <- update(mod_ns_whw, newdata = mod_data,
+                     cores = 4,  iter = 20000, thin = 4, seed = 39099630,
+                     file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_NS_SMW_PH_HAB")
+summary(mod_ns_smw)
+plot(mod_ns_smw)
 
-
-# No pH ~ N spline
-red_mod_1_smw <- update(red_mod_1_whw, newdata = mod_data,
-                        cores = 4, iter = 4000,
-                        control = list(adapt_delta = 0.99),
-                        file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_spl_PH_N_HAB")
-
-summary(red_mod_1_smw)
-plot(red_mod_1_smw, ask = FALSE)
-pp_check(red_mod_1_smw, nsamples = 50, resp = "Ell")
-pp_check(red_mod_1_smw, nsamples = 50, resp = "PH")
-pp_check(red_mod_1_smw, nsamples = 50, resp = "N")
-
-# plot(conditional_effects(red_mod_1_smw))
-
-# No Ell ~ N spline
-red_mod_2_smw <- update(red_mod_2_whw, newdata = mod_data,
-                        cores = 4, iter = 4000,
-                        control = list(adapt_delta = 0.95),
-                        file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMW_PH_N_HAB")
-
-summary(red_mod_2_smw)
-plot(red_mod_2_smw, ask = FALSE)
-pp_check(red_mod_2_smw, nsamples = 50, resp = "Ell")
-pp_check(red_mod_2_smw, nsamples = 50, resp = "PH")
-pp_check(red_mod_2_smw, nsamples = 50, resp = "N")
-
-# plot(conditional_effects(red_mod_2_smw))
-loo_compare(full_mod_smw, red_mod_1_smw, red_mod_2_smw,
-            criterion = "kfold")
-# elpd_diff se_diff
-# full_mod_smw     0.0       0.0 
-# red_mod_1_smw   -5.9      33.3 
-# red_mod_2_smw -151.0      20.4
 
 # ~~~ 4m2 unweighted ####
 mod_data <- ELL_pH %>%
@@ -3021,14 +2901,35 @@ mod_data <- ELL_pH %>%
          Ell = SM_R_UW) %>%
   select(REP_ID, SQUARE, YRnm, Management, Ell, Sdep, Ndep,
          fieldseason_rain, Year1_pH, PH, 
-         N = NC_RATIO) %>%
+         PH_SE = PH_DIW_SE_NORM,
+         ELL_SE = ELL_SM_UW_SE_NORM) %>%
   mutate(Management = ifelse(Management == "High",1,0),
          Sdep = as.numeric(scale(Sdep)), 
          Ndep = as.numeric(scale(Ndep)), 
          Year1_pH = as.numeric(scale(Year1_pH, scale = FALSE)),
-         N = as.numeric(scale(N)), 
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
+
+# Multivariate with N as a 2D spline
+# Habitat interaction
+# run model - small unweighted Ell R
+mod_smuw <- update(mod_whw, newdata = mod_data,
+                   cores = 4, iter = 20000, thin = 4, seed = 39099630,
+                   file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_SMUW_PH_HAB")
+summary(mod_smuw)
+plot(mod_smuw)
+
+mod_n_smuw <- update(mod_n_whw, newdata = mod_data,
+                     cores = 4, iter = 20000, thin = 4, seed = 39099630,
+                     file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_N_SMUW_PH_HAB")
+summary(mod_n_smuw)
+plot(mod_n_smuw)
+
+mod_ns_smuw <- update(mod_ns_whw, newdata = mod_data,
+                      cores = 4, iter = 20000, thin = 4, seed = 39099630,
+                      file = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/ELL_NS_SMUW_PH_HAB")
+summary(mod_ns_smuw)
+plot(mod_ns_smuw)
 
 # test model with different time periods
 mod_pr_time <- c(prior(normal(0,0.5), class = "b"),
@@ -3178,114 +3079,90 @@ ggsave("pH change on Ellenberg R over different time periods with data.png",
        width = 20, height = 12, units = "cm")
 
 
-# Multivariate with N as a 2D spline
-# Habitat interaction
-# run model - small unweighted Ell R
-full_mod_smuw <- update(full_mod_whw, newdata = mod_data,
-                        cores = 4, iter = 4000,
-                        control = list(adapt_delta = 0.95),
-                        file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_spl_N_HAB")
+# kfold ####
+options(future.globals.maxSize = 10e8)
+library(future)
+plan(multiprocess)
 
-summary(full_mod_smuw)
-plot(full_mod_smuw, ask = FALSE)
-pp_check(full_mod_smuw, nsamples = 50, resp = "Ell")
-pp_check(full_mod_smuw, nsamples = 50, resp = "PH")
-pp_check(full_mod_smuw, nsamples = 50, resp = "N")
+mods_list <- list.files(path = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/",
+                        pattern = ".rds$")
 
-# mod_pr_norm <- c(prior(normal(0,0.5), class = "b"),
-#                  prior(student_t(3, 0, 2.5), class = "sds"),
-#                  prior(normal(0,0.25), class = "Intercept"),
-#                  prior(normal(0,0.2), class = "ar"),
-#                  prior(student_t(3,0,0.5), class = "sd"),
-#                  prior(student_t(3,0,0.5), class = "sigma"))
-# 
-# test_mod_norm <- brm(Ell  ~ Management*PH + s(Year1_pH, N, Management) + 
-#                       (1|SQUARE) + ar(time = YRnm, gr = REP_ID), 
-#                     data = mod_data, 
-#                     prior = mod_pr_norm,
-#                     save_pars = save_pars(all = TRUE), 
-#                     cores = 4, iter = 5000)
+for (i in 1:length(mods_list)){
+  mod <- readRDS(mods_list[i])
+  
+  filename <- gsub(".rds","",mods_list[i])
+  
+  mod <- update(mod, cores = 4, iter = 20000, thin = 4,
+                seed = 39099630)
+  
+  mod <- add_criterion(mod, "kfold", group = "SQUARE",
+                       folds = "grouped",
+                       file = filename, overwrite = TRUE)
+  
+}
 
-# plot(conditional_effects(full_mod_smuw))
-
-
-# No pH ~ N spline
-red_mod_1_smuw <- update(red_mod_1_whw, newdata = mod_data,
-                         cores = 4, iter = 4000,
-                         control = list(adapt_delta = 0.99),
-                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_spl_PH_N_HAB")
-
-summary(red_mod_1_smuw)
-plot(red_mod_1_smuw, ask = FALSE)
-pp_check(red_mod_1_smuw, nsamples = 50, resp = "Ell")
-pp_check(red_mod_1_smuw, nsamples = 50, resp = "PH")
-pp_check(red_mod_1_smuw, nsamples = 50, resp = "N")
-
-# plot(conditional_effects(red_mod_1_smuw))
-
-# No Ell ~ N spline
-red_mod_2_smuw <- update(red_mod_2_whw, newdata = mod_data,
-                         cores = 4, iter = 4000,
-                         control = list(adapt_delta = 0.95),
-                         file = "Outputs/Models/Difference/Multivariate_nomeaserror/ELL_SMUW_PH_N_HAB")
-
-summary(red_mod_2_smuw)
-plot(red_mod_2_smuw, ask = FALSE)
-pp_check(red_mod_2_smuw, nsamples = 50, resp = "Ell")
-pp_check(red_mod_2_smuw, nsamples = 50, resp = "PH")
-pp_check(red_mod_2_smuw, nsamples = 50, resp = "N")
-
-# plot(conditional_effects(red_mod_2_smuw))
-
-loo_compare(full_mod_smuw, red_mod_1_smuw, red_mod_2_smuw,
-            criterion = "kfold")
+loo_compare(mod_whw, mod_whw_ns, criterion = "kfold")
 # elpd_diff se_diff
-# red_mod_1_smuw    0.0       0.0 
-# full_mod_smuw   -44.1      37.7 
-# red_mod_2_smuw -200.8      33.1 
+# mod_whw       0.0       0.0 
+# mod_whw_ns -185.5      32.1 
 
+loo_compare(mod_whuw, mod_whuw_ns, criterion = "kfold")
+# elpd_diff se_diff
+# mod_whuw       0.0       0.0 
+# mod_whuw_ns -250.6      52.4 
+
+loo_compare(mod_smw, mod_smw_ns, criterion = "kfold")
+# elpd_diff se_diff
+# mod_smw       0.0       0.0 
+# mod_smw_ns -344.7      50.3 
+
+loo_compare(mod_smuw, mod_smuw_ns, criterion = "kfold")
+# elpd_diff se_diff
+# mod_smuw     0.0       0.0   
+# mod_smuw_ns -7.1      11.5   
 
 
 # Summary plots ####
 # Plot for comparing initial pH effects on pH change
 nd <- 
   tibble(Year1_pH = seq(from = -2.25, to = 3.6, length.out = 30) %>% 
-           rep(., times = 6),
-         N = rep(c(-1,0,1), each = 30) %>%
            rep(., times = 2),
-         Management = rep(0:1, each = 90),
+         Management = rep(c("Low","High"), each = 30),
          Sdep = 0,
+         Ndep = 0,
          fieldseason_rain = 0,
+         PH_SE = 0.3,
          YRnm = 1,
-         REP_ID = 1:180)
+         REP_ID = 1:60)
 
 f <- do.call(rbind, list(
-  fitted(full_mod_whw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_whw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Weighted full"),
-  fitted(full_mod_whuw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_whuw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Unweighted full"),
-  fitted(full_mod_smw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_smw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Weighted small"),
-  fitted(full_mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Unweighted small")
-))
+)) %>%
+  mutate(Year1_pH = 1.2978*Year1_pH + 5.598)
 
 plot_dat <- ELL_pH %>% 
   select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
          PH,Management, REP_ID, Time_period,
-         Year1_pH, N = NC_RATIO) %>%
+         Year1_pH, Ndep) %>%
   filter(!is.na(Management)) %>%
   pivot_longer(contains("_R_"), names_to = "Response") %>%
   mutate(Response = recode(Response,
@@ -3296,142 +3173,61 @@ plot_dat <- ELL_pH %>%
          Management = ifelse(Management == "High", "High intensity", "Low intensity"))
 
 plot_dat %>%
-  mutate(N = as.character(N)) %>%
   ggplot() +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, N = as.character(N)) %>%
-                filter(Management == "Low intensity"),
-              aes(x = Year1_pH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = N, color = N,
-                  group = N),
-              stat = "identity", 
-              alpha = 1/4, size = 1/2) +
-  facet_wrap(~Response) +
-  labs(x = "Initial pH", y = "pH change") +
-  scale_x_continuous(expand = c(0,0)) 
-ggsave("Initial pH and N effect on pH under low intensity.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
-
-plot_dat %>%
-  mutate(N = cut(scale(N), c(-10,-0.5,0.5,10), labels = c("-1","0","1")),
-         Year1_pH = scale(Year1_pH)) %>%
-  filter(!is.na(N)) %>%
-  ggplot() +
-  geom_point(aes(x = Year1_pH, y = PH, colour = N),
+  geom_point(aes(x = Year1_pH, y = PH),
              alpha = 0.5) +
   geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, N = as.character(N)),
+  geom_smooth(data = filter(f, Management == "Low intensity"),
               aes(x = Year1_pH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = N, color = N,
-                  group = N),
-              stat = "identity", 
-              alpha = 1/3, size = 1/2) +
-  facet_grid(Response~Management) +
-  labs(x = "Initial pH", y = "pH change") +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_colour_viridis_d(option="plasma", end = 0.9) +
-  scale_fill_viridis_d(option="plasma", end = 0.9)
-ggsave("Initial pH and N effect on pH with data facet by management.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
-
-
-nd <- 
-  tibble(Year1_pH = seq(from = -2.25, to = 3.6, length.out = 30) %>% 
-           rep(., times = 6),
-         N = rep(c(-1,0,1), each = 30) %>%
-           rep(., times = 2),
-         Management = rep(0.5, each = 180),
-         Sdep = 0,
-         fieldseason_rain = 0,
-         YRnm = 1,
-         REP_ID = 1:180)
-
-f <- do.call(rbind, list(
-  fitted(full_mod_whw, newdata = nd, re_formula = NA, resp = "PH") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Weighted full"),
-  fitted(full_mod_whuw, newdata = nd, re_formula = NA, resp = "PH") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Unweighted full"),
-  fitted(full_mod_smw, newdata = nd, re_formula = NA, resp = "PH") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Weighted small"),
-  fitted(full_mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Unweighted small")
-))
-
-plot_dat %>%
-  mutate(N = cut(scale(N), c(-10,-0.5,0.5,10), labels = c("-1","0","1")),
-         Year1_pH = scale(Year1_pH)) %>%
-  filter(!is.na(N)) %>%
-  ggplot() +
-  geom_point(aes(x = Year1_pH, y = PH, colour = N),
-             alpha = 0.5) +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, N = as.character(N)) %>%
-                filter(Management == "Low intensity"),
-              aes(x = Year1_pH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = N, color = N,
-                  group = N),
-              stat = "identity", 
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              stat = "identity",
               alpha = 1/3, size = 1/2) +
   facet_wrap(~Response) +
   labs(x = "Initial pH", y = "pH change") +
   scale_x_continuous(expand = c(0,0)) +
   scale_colour_viridis_d(option="plasma", end = 0.9) +
   scale_fill_viridis_d(option="plasma", end = 0.9)
-ggsave("Initial pH and N effect on pH with data predict middle management.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 18, height = 12, units = "cm")
+ggsave("Initial pH effect on pH with data measerror unscaled.png",
+       path = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models", 
+       width = 15, height = 12, units = "cm")
 
-# Plot for comparing initial pH effects on pH change
+# Plot for comparing Sdep effects on pH change
 nd <- 
   tibble(Sdep = seq(from = -5.5, to = 1.75, length.out = 30) %>% 
-           rep(., times = 6),
-         fieldseason_rain = rep(c(-1,0,1), each = 30) %>% 
            rep(., times = 2),
-         Management = rep(0:1, each = 90),
+         fieldseason_rain = 0,
+         Management = rep(c("Low","High"), each = 30),
          Year1_pH = 0,
-         N = 0,
+         Ndep = 0,
+         PH_SE = 0.3,
          YRnm = 1,
-         REP_ID = 1:180)
+         REP_ID = 1:60)
 
 f <- do.call(rbind, list(
-  fitted(full_mod_whw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_whw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Weighted full"),
-  fitted(full_mod_whuw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_whuw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Unweighted full"),
-  fitted(full_mod_smw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_smw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Weighted small"),
-  fitted(full_mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Unweighted small")
-))
+)) %>%
+  mutate(
+    Sdep = 3.818393*Sdep - 4.769306
+  )
 
 plot_dat <- ELL_pH %>% 
   select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
@@ -3445,338 +3241,140 @@ plot_dat <- ELL_pH %>%
                            "WH_R_UW" = "Unweighted full",
                            "SM_R_W" = "Weighted small",
                            "SM_R_UW" = "Unweighted small"),
-         Management = ifelse(Management == "High", "High intensity", "Low intensity"),
-         Sdep =scale(Sdep),
-         fieldseason_rain = scale(fieldseason_rain))
+         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
+
 
 plot_dat %>%
   ggplot() +
+  geom_point(aes(x = Sdep, y = PH, colour = Management),
+             alpha = 0.1) +
   geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, fieldseason_rain = as.character(fieldseason_rain)),
+  geom_smooth(data = f,
               aes(x = Sdep,
                   y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = fieldseason_rain, color = fieldseason_rain,
-                  group = fieldseason_rain),
-              stat = "identity", 
-              alpha = 1/4, size = 1/2) +
-  facet_grid(Response~Management) +
-  labs(x = "S deposition", y = "pH change") +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_colour_viridis_d(option="plasma", end = 0.9) +
-  scale_fill_viridis_d(option="plasma", end = 0.9)
-ggsave("Sdep and rain effect on pH.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
-
-plot_dat %>%
-  mutate(fieldseason_rain = cut(scale(fieldseason_rain), c(-10,-0.5,0.5,10), labels = c("-1","0","1"))) %>%
-  filter(!is.na(fieldseason_rain)) %>%
-  ggplot() +
-  geom_point(aes(x = Sdep, y = PH, colour = fieldseason_rain),
-             alpha = 0.5) +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, fieldseason_rain = as.character(fieldseason_rain)),
-              aes(x = Sdep,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = fieldseason_rain, color = fieldseason_rain,
-                  group = fieldseason_rain),
-              stat = "identity", 
-              alpha = 1/3, size = 1/2) +
-  facet_grid(Response~Management) +
-  labs(x = "S deposition", y = "pH change") +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_colour_viridis_d(option="plasma", end = 0.9) +
-  scale_fill_viridis_d(option="plasma", end = 0.9)
-ggsave("Sdep and rain effect on pH with data.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
-
-# Plot for comparing initial pH effects on Ellenberg R change
-nd <- 
-  tibble(Year1_pH = seq(from = -2.25, to = 3.6, length.out = 30) %>% 
-           rep(., times = 6),
-         N = rep(c(-1,0,1), each = 30) %>% 
-           rep(., times = 2),
-         Management = rep(0:1, each = 90),
-         Sdep = 0,
-         PH = 0,
-         fieldseason_rain = 0,
-         YRnm = 1,
-         REP_ID = 1:180)
-
-f <- do.call(rbind, list(
-  fitted(full_mod_whw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Weighted full"),
-  fitted(full_mod_whuw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Unweighted full"),
-  fitted(full_mod_smw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Weighted small"),
-  fitted(full_mod_smuw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Unweighted small")
-))
-
-plot_dat <- ELL_pH %>% 
-  select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
-         PH,Management, REP_ID, Time_period,
-         Year1_pH, N = NC_RATIO) %>%
-  filter(!is.na(Management)) %>%
-  pivot_longer(contains("_R_"), names_to = "Response") %>%
-  mutate(Response = recode(Response,
-                           "WH_R_W" = "Weighted full",
-                           "WH_R_UW" = "Unweighted full",
-                           "SM_R_W" = "Weighted small",
-                           "SM_R_UW" = "Unweighted small"),
-         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
-
-plot_dat %>%
-  mutate(N = as.character(N)) %>%
-  ggplot() +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, N = as.character(N)),
-              aes(x = Year1_pH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = N, color = N,
-                  group = N),
-              stat = "identity", 
-              alpha = 1/4, size = 1/2) +
-  facet_grid(Response~Management) +
-  labs(x = "Initial pH", y = "Ellenberg R change") +
-  scale_x_continuous(expand = c(0,0)) 
-ggsave("Initial pH and N effect on Ellenberg R.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
-
-plot_dat %>%
-  mutate(N = cut(scale(N), c(-10,-0.5,0.5,10), labels = c("-1","0","1")),
-         Year1_pH = scale(Year1_pH)) %>%
-  filter(!is.na(N)) %>%
-  ggplot() +
-  geom_point(aes(x = Year1_pH, y = value, colour = N),
-             alpha = 0.5) +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, N = as.character(N)),
-              aes(x = Year1_pH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = N, color = N,
-                  group = N),
-              stat = "identity", 
-              alpha = 1/3, size = 1/2) +
-  facet_grid(Response~Management) +
-  labs(x = "Initial pH", y = "Ellenberg R change") +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_colour_viridis_d(option="plasma", end = 0.9) +
-  scale_fill_viridis_d(option="plasma", end = 0.9)
-ggsave("Initial pH and N effect on Ellenberg R with data.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
-
-# Plot for comparing pH change on Ellenberg R change
-nd <- 
-  tibble(PH = seq(from = -3, to = 3.5, length.out = 40) %>% 
-           rep(., times = 2),
-         Management = rep(0:1, each = 40),
-         Year1_pH = 0,
-         N = 0,
-         YRnm = 1,
-         REP_ID = 1:80)
-
-f <- do.call(rbind, list(
-  fitted(full_mod_whw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Weighted full"),
-  fitted(full_mod_whuw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Unweighted full"),
-  fitted(full_mod_smw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Weighted small"),
-  fitted(full_mod_smuw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Unweighted small")
-))
-
-plot_dat <- ELL_pH %>% 
-  select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
-         PH,Management, REP_ID, Time_period,
-         Year1_pH, N = NC_RATIO) %>%
-  filter(!is.na(Management)) %>%
-  pivot_longer(contains("_R_"), names_to = "Response") %>%
-  mutate(Response = recode(Response,
-                           "WH_R_W" = "Weighted full",
-                           "WH_R_UW" = "Unweighted full",
-                           "SM_R_W" = "Weighted small",
-                           "SM_R_UW" = "Unweighted small"),
-         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
-
-plot_dat %>%
-  ggplot() +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = f,
-              aes(x = PH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = Management, color = Management),
-              stat = "identity", 
-              alpha = 1/4, size = 1/2) +
-  facet_grid(~Response) +
-  labs(x = "pH change", y = "Ellenberg R change") +
-  scale_x_continuous(expand = c(0,0)) 
-ggsave("pH change effect on Ellenberg R.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 20, height = 10, units = "cm")
-
-plot_dat %>%
-  filter(!is.na(N)) %>%
-  ggplot() +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_point(aes(x = PH, y = value, colour = Management),
-             alpha = 0.5) +
-  geom_smooth(data = mutate(f, N = as.character(N)),
-              aes(x = PH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = Management, color = Management),
-              stat = "identity", 
-              alpha = 1/3, size = 1/2) +
-  facet_grid(~Response) +
-  labs(x = "pH change", y = "Ellenberg R change") +
-  scale_x_continuous(expand = c(0,0)) 
-ggsave("pH change effect on Ellenberg R with data.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 20, height = 10, units = "cm")
-
-# ~~ no splines ####
-# Plot for comparing pH change on Ellenberg R change
-nd <- 
-  tibble(PH = seq(from = -3, to = 3.5, length.out = 40) %>% 
-           rep(., times = 2),
-         Management = rep(0:1, each = 40),
-         YRnm = 1,
-         REP_ID = 1:80)
-
-f <- do.call(rbind, list(
-  fitted(red_mod_2_whw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Weighted full"),
-  fitted(red_mod_2_whuw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Unweighted full"),
-  fitted(red_mod_2_smw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Weighted small"),
-  fitted(red_mod_2_smuw, newdata = nd, re_formula = NA, resp = "Ell") %>%
-    as_tibble() %>%
-    bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
-           Response = "Unweighted small")
-))
-
-plot_dat <- ELL_pH %>% 
-  select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
-         PH,Management, REP_ID, Time_period) %>%
-  filter(!is.na(Management)) %>%
-  pivot_longer(contains("_R_"), names_to = "Response") %>%
-  mutate(Response = recode(Response,
-                           "WH_R_W" = "Weighted full",
-                           "WH_R_UW" = "Unweighted full",
-                           "SM_R_W" = "Weighted small",
-                           "SM_R_UW" = "Unweighted small"),
-         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
-
-plot_dat %>%
-  ggplot() +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = f,
-              aes(x = PH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = Management, color = Management),
-              stat = "identity", 
-              alpha = 1/4, size = 1/2) +
-  facet_grid(~Response) +
-  labs(x = "pH change", y = "Ellenberg R change") +
-  scale_x_continuous(expand = c(0,0)) 
-ggsave("pH change effect on Ellenberg R no spline multivariate model.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 20, height = 10, units = "cm")
-
-plot_dat %>%
-  ggplot() +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_point(aes(x = PH, y = value, colour = Management),
-             alpha = 1/3) +
-  geom_smooth(data = f,
-              aes(x = PH,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = Management, color = Management),
+                  fill = Management, color = Management,
+                  group = Management),
               stat = "identity", 
               alpha = 1/2, size = 1/2) +
-  facet_grid(~Response) +
-  labs(x = "pH change", y = "Ellenberg R change") +
+  facet_wrap(~Response) +
+  labs(x = "S deposition", y = "pH change") +
   scale_x_continuous(expand = c(0,0)) 
-ggsave("pH change effect on Ellenberg R with data no spline model.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 20, height = 10, units = "cm")
+ggsave("Sdep effect on pH with data measerror unscaled.png",
+       path = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/", 
+       width = 16, height = 10, units = "cm")
 
-# Plot for comparing initial pH effects on pH change
+# mean and prediction error
+f2 <- do.call(rbind, list(
+  posterior_predict(mod_whw, newdata = nd, re_formula = NA, resp = "PH") %>%
+    as_tibble() %>%
+    summarise(across(.fns = list(Estimate = mean,
+                                 Q2.5 = ~quantile(.x, probs = 0.025),
+                                 Q97.5 = ~quantile(.x, probs = 0.975)))) %>%
+    pivot_longer(everything(), names_to = c("ID","Metric"),
+                 names_sep = "_") %>%
+    pivot_wider(names_from = "Metric", values_from = "value") %>%
+    bind_cols(nd) %>%
+    mutate(Response = "Weighted full"),
+  posterior_predict(mod_whuw, newdata = nd, re_formula = NA, resp = "PH") %>%
+    as_tibble() %>%
+    summarise(across(.fns = list(Estimate = mean,
+                                 Q2.5 = ~quantile(.x, probs = 0.025),
+                                 Q97.5 = ~quantile(.x, probs = 0.975)))) %>%
+    pivot_longer(everything(), names_to = c("ID","Metric"),
+                 names_sep = "_") %>%
+    pivot_wider(names_from = "Metric", values_from = "value") %>%
+    bind_cols(nd) %>%
+    mutate(Response = "Unweighted full"),
+  posterior_predict(mod_smw, newdata = nd, re_formula = NA, resp = "PH") %>%
+    as_tibble() %>%
+    summarise(across(.fns = list(Estimate = mean,
+                                 Q2.5 = ~quantile(.x, probs = 0.025),
+                                 Q97.5 = ~quantile(.x, probs = 0.975)))) %>%
+    pivot_longer(everything(), names_to = c("ID","Metric"),
+                 names_sep = "_") %>%
+    pivot_wider(names_from = "Metric", values_from = "value") %>%
+    bind_cols(nd) %>%
+    mutate(Response = "Weighted small"),
+  posterior_predict(mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
+    as_tibble() %>%
+    summarise(across(.fns = list(Estimate = mean,
+                                 Q2.5 = ~quantile(.x, probs = 0.025),
+                                 Q97.5 = ~quantile(.x, probs = 0.975)))) %>%
+    pivot_longer(everything(), names_to = c("ID","Metric"),
+                 names_sep = "_") %>%
+    pivot_wider(names_from = "Metric", values_from = "value") %>%
+    bind_cols(nd) %>%
+    mutate(Response = "Unweighted small")
+)) %>%
+  mutate(
+    Management = ifelse(Management == "High", "High intensity", "Low intensity"),
+    Sdep = 3.818393*Sdep - 4.769306
+  )
+plot_dat %>%
+  ggplot() +
+  geom_point(aes(x = Sdep, y = PH, colour = Management),
+             alpha = 0.1) +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_ribbon(data = f2,
+              aes(x = Sdep,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, 
+                  group = Management),
+              stat = "identity", 
+              alpha = 1/4) +
+  geom_smooth(data = f,
+              aes(x = Sdep,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management,
+                  group = Management),
+              stat = "identity", 
+              alpha = 1/2, size = 1/2) +
+  facet_wrap(~Response) +
+  labs(x = "S deposition", y = "pH change") +
+  scale_x_continuous(expand = c(0,0))
+
+# Plot for comparing Ndep effects on pH change
 nd <- 
-  tibble(Sdep = seq(from = -5.5, to = 1.75, length.out = 30) %>% 
-           rep(., times = 6),
-         fieldseason_rain = rep(c(-1,0,1), each = 30) %>% 
+  tibble(Ndep = seq(from = -1.8, to = 3.15, length.out = 30) %>% 
            rep(., times = 2),
-         Management = rep(0:1, each = 90),
+         fieldseason_rain = 0,
+         Management = rep(c("Low","High"), each = 30),
+         Year1_pH = 0,
+         Sdep = 0,
+         PH_SE = 0.3,
          YRnm = 1,
-         REP_ID = 1:180)
+         REP_ID = 1:60)
 
 f <- do.call(rbind, list(
-  fitted(red_mod_2_whw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_whw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Weighted full"),
-  fitted(red_mod_2_whuw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_whuw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Unweighted full"),
-  fitted(red_mod_2_smw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_smw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Weighted small"),
-  fitted(red_mod_2_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
+  fitted(mod_smuw, newdata = nd, re_formula = NA, resp = "PH") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Management = ifelse(Management == 1, "High intensity", "Low intensity"),
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
            Response = "Unweighted small")
-))
+)) %>%
+  mutate(
+    Ndep = 70.08984*Ndep + 138.8274
+  )
 
 plot_dat <- ELL_pH %>% 
   select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
          PH,Management, REP_ID, Time_period,
+         Year1_pH, Ndep,
          Sdep, fieldseason_rain) %>%
   filter(!is.na(Management)) %>%
   pivot_longer(contains("_R_"), names_to = "Response") %>%
@@ -3785,123 +3383,203 @@ plot_dat <- ELL_pH %>%
                            "WH_R_UW" = "Unweighted full",
                            "SM_R_W" = "Weighted small",
                            "SM_R_UW" = "Unweighted small"),
-         Management = ifelse(Management == "High", "High intensity", "Low intensity"),
-         Sdep =scale(Sdep),
-         fieldseason_rain = scale(fieldseason_rain))
+         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
+
 
 plot_dat %>%
   ggplot() +
+  geom_point(aes(x = Ndep, y = PH, colour = Management),
+             alpha = 0.1) +
   geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, fieldseason_rain = as.character(fieldseason_rain)),
-              aes(x = Sdep,
+  geom_smooth(data = f,
+              aes(x = Ndep,
                   y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = fieldseason_rain, color = fieldseason_rain,
-                  group = fieldseason_rain),
+                  fill = Management, color = Management,
+                  group = Management),
               stat = "identity", 
-              alpha = 1/4, size = 1/2) +
-  facet_grid(Response~Management) +
-  labs(x = "S deposition", y = "pH change") +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_colour_viridis_d(option="plasma", end = 0.9) +
-  scale_fill_viridis_d(option="plasma", end = 0.9)
-ggsave("Sdep and rain effect on pH no spline model.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
+              alpha = 1/2, size = 1/2) +
+  facet_wrap(~Response) +
+  labs(x = "N deposition", y = "pH change") +
+  scale_x_continuous(expand = expansion(),limits = c(0,390)) 
+ggsave("Ndep effect on pH with data measerror unscaled.png",
+       path = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/", 
+       width = 16, height = 10, units = "cm")
 
-plot_dat %>%
-  mutate(fieldseason_rain = cut(scale(fieldseason_rain), c(-10,-0.5,0.5,10), labels = c("-1","0","1"))) %>%
-  filter(!is.na(fieldseason_rain)) %>%
-  ggplot() +
-  geom_point(aes(x = Sdep, y = PH, colour = fieldseason_rain),
-             alpha = 0.5) +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = mutate(f, fieldseason_rain = as.character(fieldseason_rain)),
-              aes(x = Sdep,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
-                  fill = fieldseason_rain, color = fieldseason_rain,
-                  group = fieldseason_rain),
-              stat = "identity", 
-              alpha = 1/3, size = 1/2) +
-  facet_grid(Response~Management) +
-  labs(x = "S deposition", y = "pH change") +
-  scale_x_continuous(expand = c(0,0)) +
-  scale_colour_viridis_d(option="plasma", end = 0.9) +
-  scale_fill_viridis_d(option="plasma", end = 0.9)
-ggsave("Sdep and rain effect on pH no spline model with data.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
-
-# Plot for comparing impact of Ndep upon N:C
+# Plot for comparing pH change on Ellenberg R change
 nd <- 
-  tibble(Ndep = seq(from = -1.8, to = 3.2, length.out = 60),
+  tibble(PH = seq(from = -3, to = 3.5, length.out = 40) %>% 
+           rep(., times = 2),
+         Management = rep(c("High","Low"), each = 40),
+         Year1_pH = 0,
+         N = 0,
+         ELL_SE = 0.4,
          YRnm = 1,
-         REP_ID = 1:60)
+         REP_ID = 1:80)
 
 f <- do.call(rbind, list(
-  fitted(full_mod_whw, newdata = nd, re_formula = NA, resp = "N") %>%
+  fitted(mod_whw, newdata = nd, re_formula = NA, resp = "Ell") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Response = "Weighted full"),
-  fitted(full_mod_whuw, newdata = nd, re_formula = NA, resp = "N") %>%
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
+           Response = "Weighted full"),
+  fitted(mod_whuw, newdata = nd, re_formula = NA, resp = "Ell") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Response = "Unweighted full"),
-  fitted(full_mod_smw, newdata = nd, re_formula = NA, resp = "N") %>%
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
+           Response = "Unweighted full"),
+  fitted(mod_smw, newdata = nd, re_formula = NA, resp = "Ell") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Response = "Weighted small"),
-  fitted(full_mod_smuw, newdata = nd, re_formula = NA, resp = "N") %>%
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
+           Response = "Weighted small"),
+  fitted(mod_smuw, newdata = nd, re_formula = NA, resp = "Ell") %>%
     as_tibble() %>%
     bind_cols(nd) %>%
-    mutate(Response = "Unweighted small")
+    mutate(Management = ifelse(Management == "High", "High intensity", "Low intensity"),
+           Response = "Unweighted small")
 ))
 
 plot_dat <- ELL_pH %>% 
-  filter(!is.na(Management)) %>%
   select(WH_R_W,WH_R_UW,SM_R_W,SM_R_UW,
-         N = NC_RATIO, Ndep, REP_ID, Time_period) %>%
+         PH,Management, REP_ID, Time_period,
+         Year1_pH, N = NC_RATIO) %>%
+  filter(!is.na(Management)) %>%
   pivot_longer(contains("_R_"), names_to = "Response") %>%
   mutate(Response = recode(Response,
                            "WH_R_W" = "Weighted full",
                            "WH_R_UW" = "Unweighted full",
                            "SM_R_W" = "Weighted small",
                            "SM_R_UW" = "Unweighted small"),
-         Ndep =scale(Ndep),
-         N = scale(N))
+         Management = ifelse(Management == "High", "High intensity", "Low intensity"))
 
 plot_dat %>%
   ggplot() +
   geom_hline(yintercept = 0, colour = "gray") +
   geom_smooth(data = f,
-              aes(x = Ndep,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              aes(x = PH,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
               stat = "identity", 
-              alpha = 1/4, size = 1/2,
-              fill = "#CC79A7", colour = "#CC79A7") +
-  facet_wrap(~Response) +
-  labs(x = "N deposition", y = "N:C ratio") +
-  scale_x_continuous(expand = c(0,0))
-ggsave("Ndep effect on NC full model.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
-
-plot_dat %>%
-  ggplot() +
-  geom_point(aes(x = Ndep, y = N),
-             alpha = 0.5, colour = "#CC79A7") +
-  geom_hline(yintercept = 0, colour = "gray") +
-  geom_smooth(data = f,
-              aes(x = Ndep,
-                  y = Estimate, ymin = Q2.5, ymax = Q97.5),
-              stat = "identity", 
-              alpha = 1/3, size = 1/2,
-              fill = "black", colour = "black") +
-  facet_wrap(~Response) +
-  labs(x = "N deposition", y = "N:C ratio") +
+              alpha = 1/4, size = 1/2) +
+  facet_grid(~Response) +
+  labs(x = "pH change", y = "Ellenberg R change") +
   scale_x_continuous(expand = c(0,0)) 
-ggsave("Ndep effect on NC full model with data.png",
-       path = "Outputs/Models/Difference/Multivariate_nomeaserror", 
-       width = 16, height = 18, units = "cm")
+ggsave("pH change effect on Ellenberg R measerror.png",
+       path = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/", 
+       width = 20, height = 10, units = "cm")
+
+plot_dat %>%
+  ggplot() +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_point(aes(x = PH, y = value, colour = Management),
+             alpha = 0.5) +
+  geom_smooth(data = mutate(f, N = as.character(N)),
+              aes(x = PH,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/3, size = 1/2) +
+  facet_grid(~Response) +
+  labs(x = "pH change", y = "Ellenberg R change") +
+  scale_x_continuous(expand = c(0,0)) 
+ggsave("pH change effect on Ellenberg R with data measerror.png",
+       path = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models", 
+       width = 20, height = 10, units = "cm")
+
+# Parameter estimates
+mcmc_plot(mod_whw, type = "areas_ridges") + 
+  ggtitle(expression("Cover weighted Ellenberg R 200m"^2)) + 
+  mcmc_plot(mod_whuw, type = "areas_ridges") + theme(axis.text.y = element_blank())+
+  ggtitle(expression("Unweighted Ellenberg R 200m"^2)) +
+  mcmc_plot(mod_smw, type = "areas_ridges") + 
+  ggtitle(expression("Cover weighted Ellenberg R 4m"^2)) +
+  mcmc_plot(mod_smuw, type = "areas_ridges") + theme(axis.text.y = element_blank()) +
+  ggtitle(expression("Unweighted Ellenberg R 4m"^2)) 
+
+ggsave("Parameter estimates bayesplot.png", 
+       path = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/",
+       width = 24, height = 14, units = "cm", scale = 1.2)
+
+
+plot_pars <- c(parnames(mod_whw)[1:21],"ar_PH","ar_Ell")
+param_summaries <- do.call(rbind, list(
+  posterior_summary(mod_whw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "WH_W"),
+  posterior_summary(mod_whuw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "WH_UW"),
+  posterior_summary(mod_smw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "SM_W"),
+  posterior_summary(mod_smuw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "SM_UW")
+)) 
+write.csv(param_summaries, 
+          "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/Parameter_summary_table.csv",
+          row.names = FALSE)
+
+param_summaries <- param_summaries %>% 
+  mutate(across(Estimate:Q97.5, round, 3)) %>%
+  mutate(CI = paste0(Q2.5, " - ", Q97.5),
+         Estimate = as.character(Estimate)) %>%
+  select(-Est.Error, -Q2.5, -Q97.5) %>%
+  pivot_longer(c(Estimate,CI)) %>%
+  pivot_wider(names_from = c(Model, name), names_sep = "__") %>%
+  mutate(across(ends_with("Estimate"),as.numeric))
+writexl::write_xlsx(param_summaries, 
+                    "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/Parameter_summary_nicetable.xlsx")
+
+
+# NS as Ellenberg predictors
+mcmc_plot(mod_ns_whw, type = "areas_ridges") + 
+  ggtitle(expression("Cover weighted Ellenberg R 200m"^2)) + 
+  mcmc_plot(mod_ns_whuw, type = "areas_ridges") + theme(axis.text.y = element_blank())+
+  ggtitle(expression("Unweighted Ellenberg R 200m"^2)) +
+  mcmc_plot(mod_ns_smw, type = "areas_ridges") + 
+  ggtitle(expression("Cover weighted Ellenberg R 4m"^2)) +
+  mcmc_plot(mod_ns_smuw, type = "areas_ridges") + theme(axis.text.y = element_blank()) +
+  ggtitle(expression("Unweighted Ellenberg R 4m"^2)) 
+
+ggsave("Parameter estimates Ell_NS models bayesplot.png", 
+       path = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/",
+       width = 24, height = 14, units = "cm", scale = 1.3)
+
+
+plot_pars <- c(parnames(mod_ns_whw)[1:25],"ar_PH","ar_Ell")
+param_summaries <- do.call(rbind, list(
+  posterior_summary(mod_ns_whw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "WH_W"),
+  posterior_summary(mod_ns_whuw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "WH_UW"),
+  posterior_summary(mod_ns_smw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "SM_W"),
+  posterior_summary(mod_ns_smuw, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "SM_UW")
+)) %>% 
+  mutate(across(Estimate:Q97.5, round, 3)) %>%
+  mutate(CI = paste0(Q2.5, " - ", Q97.5),
+         Estimate = as.character(Estimate)) %>%
+  select(-Est.Error, -Q2.5, -Q97.5) %>%
+  pivot_longer(c(Estimate,CI)) %>%
+  pivot_wider(names_from = c(Model, name), names_sep = "__") %>%
+  mutate(across(ends_with("Estimate"),as.numeric))
+writexl::write_xlsx(param_summaries, 
+                    "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/Parameter_summary_nsmodel_nicetable.xlsx")
+
 
 
 # ** Measurement error ####
@@ -4818,3 +4496,4 @@ param_summaries <- do.call(rbind, list(
   mutate(across(ends_with("Estimate"),as.numeric))
 writexl::write_xlsx(param_summaries, 
                     "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/Parameter_summary_nsmodel_nicetable.xlsx")
+
