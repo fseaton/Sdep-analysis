@@ -12,6 +12,7 @@ source('stan_utility.R', local=util)
 c_dark_trans <- "#80808080"
 c_yellow_trans <- "#FFFF0080"
 
+mang_cols <- unname(palette.colors()[c(2,6)])
 
 
 # taking PH_long and X_Ell from 01b script
@@ -1035,95 +1036,95 @@ pp_check(ph_Ndep_diff)
 
 
 # * Measurement error ####
-## ** Sdep ####
-# model each Ellenberg R change as a function of Sdep
+
+# The following code (up until the graphs) was run in parallel on a modelling PC with
+# many cores
+library(brms)
+library(dplyr)
+options(future.globals.maxSize = 10e8)
+library(future)
+library(future.apply)
+plan(multisession)
+
+ELL_pH <- read.csv("Outputs/ELL_pH_181120.csv")
+
+mod_pr <- mod_pr <- c(prior(normal(0,0.5), class = "b"),
+                      prior(normal(0,0.25), class = "Intercept"),
+                      prior(normal(2,0.5), class = "ar"),
+                      prior(student_t(3,0,1), class = "sd"),
+                      prior(student_t(3,0,1), class = "sigma"))
+
 mod_data <- ELL_pH %>%
   filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_W, Ell_SE = ELL_WH_W_SE_NORM, 
-         Management = ifelse(Management == "High",1,0),
-         Sdep = as.numeric(scale(Sdep))) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Ell_SE, Sdep, Management) %>%
+         Response = PH) %>%
+  select(REP_ID, SQUARE, YRnm, Management, Sdep, Ndep,
+         Response,
+         RESP_SE = PH_DIW_SE_NORM) %>%
+  mutate(Predictor = as.numeric(scale(Sdep))) %>%
   na.omit()
 
-# prior checks
-get_prior(Ell | mi(Ell_SE) ~ Sdep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-          data = mod_data)
+set.seed(78342835)
+init_mod <- brm(Response | mi(RESP_SE) ~ Predictor*Management +
+                  (1|p|SQUARE) +
+                  ar(time = YRnm, gr = REP_ID),
+                data = mod_data, prior = mod_pr,
+                save_pars = save_pars(all = TRUE, latent = TRUE), 
+                file = "PH__Sdep_HAB",
+                cores = 4, iter = 20000, thin = 4,
+                seed = 78342835)
 
-mod_pr <- c(prior(normal(0,0.5), class = "b"),
-            prior(normal(0,0.25), class = "Intercept"),
-            prior(normal(0.4,0.2), class = "ar"),
-            prior(student_t(3,0,1), class = "sd"),
-            prior(student_t(3,0,1), class = "sigma"))
+data_to_run <- data.frame(
+  Response = rep(c("WH_R_W","WH_R_UW","SM_R_W","SM_R_UW","PH"),
+                 each = 2),
+  RESP_SE = rep(c("ELL_WH_W_SE_NORM","ELL_WH_UW_SE_NORM",
+                  "ELL_SM_W_SE_NORM","ELL_SM_UW_SE_NORM",
+                  "PH_DIW_SE_NORM"),
+                each = 2),
+  Predictor = rep(c("Sdep","Ndep"),5)
+)
 
-# prior predictive check model
-prior_mod <- brm(Ell |mi(Ell_SE) ~ Sdep*Management + 
-                   (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                 sample_prior = "only",
-                 data = mod_data, prior = mod_pr, cores = 4, iter = 5000)
-summary(prior_mod)
-
-# ellenberg R model - weighted Ellenberg R for whole plot
-ell_Sdep_diff <- brm(Ell | mi(Ell_SE) ~ Sdep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                     data = mod_data, prior = mod_pr, 
-                     cores = 4, iter = 5000, 
-                     file = "Outputs/Models/Difference/Univariate_measerror/EllR_WHW_Sdep_HAB")
-summary(ell_Sdep_diff)
-plot(ell_Sdep_diff, ask = FALSE)
-pp_check(ell_Sdep_diff)
-
-# unweighted ellenberg r whole plot
 mod_data <- ELL_pH %>%
   filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
-         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_UW, Ell_SE = ELL_WH_UW_SE_NORM,
-         Management = ifelse(Management == "High",1,0),
-         Sdep = as.numeric(scale(Sdep))) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Ell_SE, Sdep, Management) %>%
-  na.omit() 
-ell_Sdep_diffuw <- update(ell_Sdep_diff, newdata = mod_data, cores=4, iter = 5000,
-                          file = "Outputs/Models/Difference/Univariate_measerror/EllR_WHUW_Sdep_HAB")
-summary(ell_Sdep_diffuw)
-plot(ell_Sdep_diffuw, ask = FALSE)
-pp_check(ell_Sdep_diffuw)
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1))
 
+# Function for updating the initial model with the new response/predictor combo
+mod_update <- function(Response, RESP_SE, Predictor, mod_data,init_mod){
+  mod_data$Response <- mod_data[,Response]
+  mod_data$RESP_SE <- mod_data[,RESP_SE]
+  mod_data$Predictor <- mod_data[,Predictor]
+  
+  mod_data <- select(mod_data, Response, Predictor, RESP_SE,
+                     Management, YRnm, SQUARE, REP_ID)
+  
+  filename <- paste(Response, Predictor, sep = "__")
+  
+  fit <- update(init_mod, newdata = mod_data,
+                cores = 4, iter = 20000, thin = 4,
+                seed = 78342835, file = filename)
+}
 
-# weighted ellenberg r small plot
-mod_data <- ELL_pH %>%
-  filter(!is.na(Management)) %>%
-  mutate(YRnm = as.integer(as.factor(Year)),
-         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = SM_R_W, Ell_SE = ELL_SM_W_SE_NORM,
-         Management = ifelse(Management == "High",1,0),
-         Sdep = as.numeric(scale(Sdep))) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Ell_SE, Sdep, Management) %>%
-  na.omit() 
-ell_Sdep_diffsmw <- update(ell_Sdep_diff, newdata = mod_data, cores=4, iter = 5000,
-                           control = list(adapt_delta = 0.99),
-                           file = "Outputs/Models/Difference/Univariate_measerror/EllR_SMW_Sdep_HAB")
-summary(ell_Sdep_diffsmw)
-plot(ell_Sdep_diffsmw, ask = FALSE)
-pp_check(ell_Sdep_diffsmw)
+# futures code for running this on many cores
+set.seed(78342835)
+testrun <- future_mapply(mod_update, 
+                         data_to_run$Response,
+                         data_to_run$RESP_SE,
+                         data_to_run$Predictor,
+                         list(mod_data, mod_data,mod_data,mod_data,mod_data,
+                              mod_data, mod_data,mod_data,mod_data,mod_data), 
+                         list(init_mod,init_mod,init_mod,init_mod,init_mod,
+                              init_mod,init_mod,init_mod,init_mod,init_mod),
+                         future.seed = TRUE, SIMPLIFY = FALSE)
 
-# weighted ellenberg r small plot
-mod_data <- ELL_pH %>%
-  filter(!is.na(Management)) %>%
-  mutate(YRnm = as.integer(as.factor(Year)),
-         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = SM_R_UW, Ell_SE = ELL_SM_UW_SE_NORM,
-         Management = ifelse(Management == "High",1,0),
-         Sdep = as.numeric(scale(Sdep))) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Ell_SE, Sdep, Management) %>%
-  na.omit() 
-ell_Sdep_diffsmuw <- update(ell_Sdep_diff, newdata = mod_data, cores=4, iter = 5000,
-                            control = list(adapt_delta = 0.99),
-                            file = "Outputs/Models/Difference/Univariate_measerror/EllR_SMUW_Sdep_HAB")
-summary(ell_Sdep_diffsmuw)
-plot(ell_Sdep_diffsmuw, ask = FALSE)
-pp_check(ell_Sdep_diffsmuw)
-
+# All of the Ellenberg ~ Sdep models had divergent transitions
+pars_plot <- c("b_Intercept","b_Predictor","b_ManagementLow",
+               "b_Predictor:ManagementLow","ar[1]","sd_SQUARE__Intercept",
+               "sigma","Intercept" )
+pairs(testrun[[3]]$fit, pars = pars_plot, log = TRUE)
+pairs(testrun[[5]]$fit, pars = pars_plot, log = TRUE)
+pairs(testrun[[7]]$fit, pars = pars_plot, log = TRUE)
 
 # Plot for comparing Sdep effects on different Ellenberg R scores
 nd <- 
@@ -1201,95 +1202,6 @@ ggsave("Sdep effect on Ellenberg R score versions with data.png",
        path = "Outputs/Models/Difference/Univariate_measerror", 
        width = 16, height = 12, units = "cm")
 
-# ** Ndep ####
-# model each Ellenberg R change as a function of Ndep
-mod_data <- ELL_pH %>%
-  filter(!is.na(Management)) %>%
-  mutate(YRnm = as.integer(as.factor(Year)),
-         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_W, Ell_SE = ELL_WH_W_SE_NORM,
-         Management = ifelse(Management == "High",1,0),
-         Ndep = as.numeric(scale(Ndep))) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Ell_SE, Ndep, Management) %>%
-  na.omit()
-
-# prior checks
-get_prior(Ell | mi(Ell_SE) ~ Ndep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-          family = "student", data = mod_data)
-
-mod_pr <- c(prior(normal(0,0.5), class = "b"),
-            prior(normal(0,0.25), class = "Intercept"),
-            prior(normal(0.4,0.2), class = "ar"),
-            prior(student_t(3,0,1), class = "sd"),
-            prior(student_t(3,0,1), class = "sigma"))
-
-# prior predictive check model
-prior_mod <- brm(Ell | mi(Ell_SE) ~ Ndep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                 family = "student", sample_prior = "only",
-                 data = mod_data, prior = mod_pr, cores = 4, iter = 5000)
-summary(prior_mod)
-pp_check(prior_mod, nsamples = 50)
-# underestimates peak at 0 on average but gets close
-
-# ellenberg R model - weighted Ellenberg R for whole plot
-ell_Ndep_diff <- brm(Ell | mi(Ell_SE) ~ Ndep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                     data = mod_data, prior = mod_pr, family = "student",
-                     cores = 4, iter = 5000, 
-                     file = "Outputs/Models/Difference/Univariate_measerror/EllR_WHW_Ndep_HAB")
-summary(ell_Ndep_diff)
-plot(ell_Ndep_diff, ask = FALSE)
-pp_check(ell_Ndep_diff)
-
-# unweighted ellenberg r whole plot
-mod_data <- ELL_pH %>%
-  filter(!is.na(Management)) %>%
-  mutate(YRnm = as.integer(as.factor(Year)),
-         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = WH_R_UW, Ell_SE = ELL_WH_UW_SE_NORM,
-         Management = ifelse(Management == "High",1,0),
-         Ndep = as.numeric(scale(Ndep))) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Ell_SE, Ndep, Management) %>%
-  na.omit() 
-ell_Ndep_diffuw <- update(ell_Ndep_diff, newdata = mod_data, cores=4, iter = 5000,
-                          file = "Outputs/Models/Difference/Univariate_measerror/EllR_WHUW_Ndep_HAB")
-summary(ell_Ndep_diffuw)
-plot(ell_Ndep_diffuw, ask = FALSE)
-pp_check(ell_Ndep_diffuw)
-
-
-# weighted ellenberg r small plot
-mod_data <- ELL_pH %>%
-  filter(!is.na(Management)) %>%
-  mutate(YRnm = as.integer(as.factor(Year)),
-         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = SM_R_W, Ell_SE = ELL_SM_W_SE_NORM,
-         Management = ifelse(Management == "High",1,0),
-         Ndep = as.numeric(scale(Ndep))) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Ell_SE, Ndep, Management) %>%
-  na.omit() 
-ell_Ndep_diffsmw <- update(ell_Ndep_diff, newdata = mod_data, cores = 4, iter = 5000,
-                           control = list(adapt_delta = 0.99),
-                           file = "Outputs/Models/Difference/Univariate_measerror/EllR_SMW_Ndep_HAB")
-summary(ell_Ndep_diffsmw)
-plot(ell_Ndep_diffsmw, ask = FALSE)
-pp_check(ell_Ndep_diffsmw)
-
-# unweighted ellenberg r small plot
-mod_data <- ELL_pH %>%
-  filter(!is.na(Management)) %>%
-  mutate(YRnm = as.integer(as.factor(Year)),
-         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Ell = SM_R_UW, Ell_SE = ELL_SM_UW_SE_NORM,
-         Management = ifelse(Management == "High",1,0),
-         Ndep = as.numeric(scale(Ndep))) %>%
-  select(REP_ID, SQUARE, YRnm, Ell, Ell_SE, Ndep, Management) %>%
-  na.omit() 
-ell_Ndep_diffsmuw <- update(ell_Ndep_diff, newdata = mod_data, cores = 4, iter = 5000,
-                            control = list(adapt_delta = 0.99),
-                            file = "Outputs/Models/Difference/Univariate_measerror/EllR_SMUW_Ndep_HAB")
-summary(ell_Ndep_diffsmuw)
-plot(ell_Ndep_diffsmuw, ask = FALSE)
-pp_check(ell_Ndep_diffsmuw)
 
 
 # Plot for comparing Ndep effects on different Ellenberg R scores
@@ -1368,34 +1280,56 @@ ggsave("Ndep effect on Ellenberg R score versions with data.png",
        path = "Outputs/Models/Difference/Univariate_measerror", 
        width = 16, height = 12, units = "cm")
 
+# Read in models from files for pH plots
+dir_mods <- "Outputs/Models/Difference/Univariate_measerror/"
+mods <- list.files(path = dir_mods, pattern = "dep\\.rds$")
+mods <- lapply(mods, function(x) readRDS(paste0(dir_mods, x)))
 
-# *** pH ####
-mod_data <- ELL_pH %>%
-  filter(!is.na(Management)) %>%
-  mutate(YRnm = as.integer(as.factor(Year)),
-         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Management = ifelse(Management == "High",1,0),
-         PH_SE = PH_DIW_SE_NORM,
-         Sdep = as.numeric(scale(Sdep)),
-         Ndep = as.numeric(scale(Ndep))) %>%
-  select(REP_ID, SQUARE, YRnm, PH, PH_SE, Sdep, Ndep, Management) %>%
-  na.omit() 
-ph_Sdep_diff <- brm(PH | mi(PH_SE) ~ Sdep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                    data = mod_data, prior = mod_pr,
-                    cores = 4, iter = 5000, 
-                    file = "Outputs/Models/Difference/Univariate_measerror/PH_Sdep_HAB")
-summary(ph_Sdep_diff)
-plot(ph_Sdep_diff, ask = FALSE)
-pp_check(ph_Sdep_diff)
+# remind myself which have divergent transitions
+lapply(mods, function(x) {
+  nuts_params(x) %>%
+    filter(Parameter == "divergent__") %>%
+    .$Value %>% sum()
+})
 
-ph_Ndep_diff <- brm(PH | mi(PH_SE) ~ Ndep*Management + (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                    data = mod_data, prior = mod_pr,
-                    cores = 4, iter = 5000, 
-                    file = "Outputs/Models/Difference/Univariate_measerror/PH_Ndep_HAB")
-summary(ph_Ndep_diff)
-plot(ph_Ndep_diff, ask = FALSE)
-pp_check(ph_Ndep_diff)
 
+pH_Ndep_mod <- mods[[1]]
+pH_Sdep_mod <- mods[[2]]
+
+summary(pH_Sdep_mod)
+summary(pH_Ndep_mod)
+
+mcmc_plot(pH_Sdep_mod, type = "acf")
+mcmc_plot(pH_Ndep_mod, type = "acf")
+
+sdep_pl <- plot(conditional_effects(pH_Sdep_mod), points = TRUE, plot = FALSE)[[3]]
+ndep_pl <- plot(conditional_effects(pH_Ndep_mod), points = TRUE, plot = FALSE)[[3]]
+sdep_pl + labs(x = expression("Change in S deposition (kg S ha"^-1*")"), 
+               y = "pH change") + 
+  scale_color_manual(values = mang_cols,
+                     aesthetics = c("color","fill")) +
+  ndep_pl + labs(x = expression("Cumulative N deposition (kg N ha"^-1*")"), 
+                 y = "pH change")  + 
+  scale_color_manual(values = mang_cols,
+                     aesthetics = c("color","fill")) +
+  plot_layout(guides = "collect")
+ggsave("Sdep and Ndep effects on pH.png", path = dir_mods, 
+       width = 15, height = 7, units = "cm", scale = 1.5)
+
+plot_pars <- parnames(pH_Sdep_mod)[1:8]
+param_summaries <- rbind(
+  posterior_summary(pH_Sdep_mod) %>%
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    filter(Parameter %in% plot_pars) %>%
+    mutate(Predictor = "Sdep"),
+  posterior_summary(pH_Ndep_mod) %>%
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    filter(Parameter %in% plot_pars) %>%
+    mutate(Predictor = "Ndep")
+)
+write.csv(param_summaries, paste0(dir_mods,"pH_NSdep_mods_params.csv"))
 
 # Multivariate ####
 # Combine pH and Ellenberg R with original pH and rain differences
@@ -3580,6 +3514,48 @@ param_summaries <- do.call(rbind, list(
 writexl::write_xlsx(param_summaries, 
                     "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models/Parameter_summary_nsmodel_nicetable.xlsx")
 
+plot_pars <- c(parnames(mod_whw)[1:21],"ar_PH","ar_Ell")
+post <- do.call(rbind, list(
+  posterior_samples(mod_whw, pars = plot_pars) %>% 
+    mutate(Model = "WH_W"),
+  posterior_samples(mod_whuw, pars = plot_pars) %>% 
+    mutate(Model = "WH_UW"),
+  posterior_samples(mod_smw, pars = plot_pars) %>% 
+    mutate(Model = "SM_W"),
+  posterior_samples(mod_smuw, pars = plot_pars) %>% 
+    mutate(Model = "SM_UW")
+)) 
+post %>%
+  transmute(Ell_pH_High    = b_Ell_PH + `b_Ell_Management:PH`,
+            Ell_pH_Low = b_Ell_PH,
+            pH_Sdep_High = b_PH_Sdep + `b_PH_Management:Sdep`,
+            pH_Sdep_Low = b_PH_Sdep,
+            pH_Ndep_High = b_PH_Ndep + `b_PH_Management:Ndep`,
+            pH_Ndep_Low = b_PH_Ndep,
+            # pH_InitialpH_NA = b_PH_Year1_pH,
+            # pH_Rainfall_NA = b_PH_fieldseason_rain,
+            Model = Model) %>%
+  tidyr::pivot_longer(contains("_"), "key", "value") %>%
+  tidyr::separate(key, c("Response","Predictor","Management"),
+                  sep = "_", remove = FALSE) %>%
+  mutate(group = paste0(Model,key),
+         Response = paste("Response:",Response),
+         Predictor = paste("Predictor:",Predictor),
+         Model = recode(Model,
+                        "SM_UW" = "Small unweighted",
+                        "SM_W" = "Small weighted",
+                        "WH_W" = "Whole weighted",
+                        "WH_UW" = "Whole unweighted")) %>%
+  ggplot(aes(x = value, group = group, 
+             color = Management, fill = Management)) +
+  geom_density(alpha = 1/4) +
+  facet_grid(Model~Response + Predictor) +
+  scale_x_continuous("Parameter estimate", expand = c(0, 0)) +
+  scale_y_continuous(NULL, breaks = NULL, expand = c(0,0)) +
+  scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill")) 
+ggsave("Parameter estimates of pH and Ndep and Sdep by management.png",
+       path = "Outputs/Models/Difference/Multivariate_nomeaserror/Linear_models",
+       width = 15, height = 15, units = "cm")
 
 
 # ** Measurement error ####
@@ -3931,7 +3907,6 @@ mod_data <- ELL_pH %>%
          fieldseason_rain = as.numeric(scale(fieldseason_rain))) %>%
   na.omit()
 
-# Multivariate with N as a 2D spline
 # Habitat interaction
 # run model - small unweighted Ell R
 mod_smuw <- update(mod_whw, newdata = mod_data,
@@ -3978,6 +3953,49 @@ mod_smuw_ns <- update(mod_whw_ns, newdata = mod_data,
 summary(mod_smuw_ns)
 plot(mod_smuw_ns, ask = FALSE)
 
+post <- posterior_samples(mod_smuw) 
+
+post %>%
+  transmute(Ell_pH_ManagementLow    = bsp_Ell_miPH + `bsp_Ell_miPH:ManagementLow`,
+            Ell_pH_ManagementHigh = bsp_Ell_miPH,
+            pH_Sdep_Low = b_PH_Sdep + `b_PH_ManagementLow:Sdep`,
+            pH_Sdep_High = b_PH_Sdep,
+            pH_Ndep_Low = b_PH_Ndep + `b_PH_ManagementLow:Ndep`,
+            pH_Ndep_High = b_PH_Ndep) %>%
+  tidyr::gather(key, value) %>%
+  group_by(key) %>%
+  summarise(mean = mean(value), 
+            Q2.5 = quantile(value, probs = 0.025),
+            Q97.5 = quantile(value, probs = 0.975))
+# # A tibble: 6 x 4
+# key                      mean    Q2.5  Q97.5
+# <chr>                   <dbl>   <dbl>  <dbl>
+# 1 Ell_pH_ManagementHigh 0.186    0.113  0.258 
+# 2 Ell_pH_ManagementLow  0.146    0.0840 0.211 
+# 3 pH_Ndep_High          0.214    0.0861 0.343 
+# 4 pH_Ndep_Low           0.156    0.0735 0.238 
+# 5 pH_Sdep_High          0.0394  -0.0386 0.114 
+# 6 pH_Sdep_Low           0.00287 -0.0658 0.0708
+
+post %>%
+  transmute(Ell_pH_Low    = bsp_Ell_miPH + `bsp_Ell_miPH:ManagementLow`,
+            Ell_pH_High = bsp_Ell_miPH,
+            pH_Sdep_Low = b_PH_Sdep + `b_PH_ManagementLow:Sdep`,
+            pH_Sdep_High = b_PH_Sdep,
+            pH_Ndep_Low = b_PH_Ndep + `b_PH_ManagementLow:Ndep`,
+            pH_Ndep_High = b_PH_Ndep,
+            pH_InitialpH_NA = b_PH_Year1_pH,
+            pH_Rainfall_NA = b_PH_fieldseason_rain) %>%
+  tidyr::gather(key, value) %>%
+  tidyr::separate(key, c("Response","Predictor","Management"),
+                  sep = "_", remove = FALSE) %>%
+  ggplot(aes(x = value, group = key, 
+             color = Management, fill = Management)) +
+  geom_density(alpha = 1/4) +
+  facet_wrap(~Response + Predictor) +
+  scale_x_continuous(expression(gamma), expand = c(0, 0)) +
+  scale_y_continuous(NULL, breaks = NULL)
+  
 
 # Kfold ####
 options(future.globals.maxSize = 10e8)
@@ -4364,6 +4382,8 @@ plot_dat %>%
                   fill = Management, color = Management),
               stat = "identity", 
               alpha = 1/4, size = 1/2) +
+  scale_colour_manual(values = mang_cols,
+                      aesthetics = c("colour","fill")) +
   facet_grid(~Response) +
   labs(x = "pH change", y = "Ellenberg R change") +
   scale_x_continuous(expand = c(0,0)) 
@@ -4383,12 +4403,32 @@ plot_dat %>%
               stat = "identity", 
               alpha = 1/3, size = 1/2) +
   facet_grid(~Response) +
+  scale_colour_manual(values = mang_cols,
+                      aesthetics = c("colour","fill")) +
   labs(x = "pH change", y = "Ellenberg R change") +
   scale_x_continuous(expand = c(0,0)) 
 ggsave("pH change effect on Ellenberg R with data measerror.png",
        path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models", 
        width = 20, height = 10, units = "cm")
-
+plot_dat %>%
+  ggplot() +
+  geom_hline(yintercept = 0, colour = "gray") +
+  geom_point(aes(x = PH, y = value, colour = Management),
+             alpha = 0.5) +
+  geom_smooth(data = mutate(f, N = as.character(N)),
+              aes(x = PH,
+                  y = Estimate, ymin = Q2.5, ymax = Q97.5,
+                  fill = Management, color = Management),
+              stat = "identity", 
+              alpha = 1/3, size = 1/2) +
+  facet_wrap(~Response) +
+  scale_colour_manual(values = mang_cols,
+                      aesthetics = c("colour","fill")) +
+  labs(x = "pH change", y = "Ellenberg R change") +
+  scale_x_continuous(expand = c(0,0)) 
+ggsave("pH change effect on Ellenberg R with data measerror.png",
+       path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models", 
+       width = 15, height = 12, units = "cm")
 
 # Parameter estimates
 mcmc_plot(mod_whw, type = "areas_ridges") + 
@@ -4441,6 +4481,7 @@ write.csv(param_summaries,
           "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/Parameter_summary_table.csv",
           row.names = FALSE)
 
+
 param_summaries <- param_summaries %>% 
   mutate(across(Estimate:Q97.5, round, 3)) %>%
   mutate(CI = paste0(Q2.5, " - ", Q97.5),
@@ -4452,6 +4493,48 @@ param_summaries <- param_summaries %>%
 writexl::write_xlsx(param_summaries, 
                     "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models/Parameter_summary_nicetable.xlsx")
 
+
+post <- do.call(rbind, list(
+  posterior_samples(mod_whw, pars = plot_pars) %>% 
+    mutate(Model = "WH_W"),
+  posterior_samples(mod_whuw, pars = plot_pars) %>% 
+    mutate(Model = "WH_UW"),
+  posterior_samples(mod_smw, pars = plot_pars) %>% 
+    mutate(Model = "SM_W"),
+  posterior_samples(mod_smuw, pars = plot_pars) %>% 
+    mutate(Model = "SM_UW")
+)) 
+post %>%
+  transmute(Ell_pH_Low    = bsp_Ell_miPH + `bsp_Ell_miPH:ManagementLow`,
+            Ell_pH_High = bsp_Ell_miPH,
+            pH_Sdep_Low = b_PH_Sdep + `b_PH_ManagementLow:Sdep`,
+            pH_Sdep_High = b_PH_Sdep,
+            pH_Ndep_Low = b_PH_Ndep + `b_PH_ManagementLow:Ndep`,
+            pH_Ndep_High = b_PH_Ndep,
+            # pH_InitialpH_NA = b_PH_Year1_pH,
+            # pH_Rainfall_NA = b_PH_fieldseason_rain,
+            Model = Model) %>%
+  tidyr::pivot_longer(contains("_"), "key", "value") %>%
+  tidyr::separate(key, c("Response","Predictor","Management"),
+                  sep = "_", remove = FALSE) %>%
+  mutate(group = paste0(Model,key),
+         Response = paste("Response:",Response),
+         Predictor = paste("Predictor:",Predictor),
+         Model = recode(Model,
+                        "SM_UW" = "Small unweighted",
+                        "SM_W" = "Small weighted",
+                        "WH_W" = "Whole weighted",
+                        "WH_UW" = "Whole unweighted")) %>%
+  ggplot(aes(x = value, group = group, 
+             color = Management, fill = Management)) +
+  geom_density(alpha = 1/4) +
+  facet_grid(Model~Response + Predictor) +
+  scale_x_continuous("Parameter estimate", expand = c(0, 0)) +
+  scale_y_continuous(NULL, breaks = NULL, expand = c(0,0)) +
+  scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill")) 
+ggsave("Parameter estimates of pH and Ndep and Sdep by management.png",
+       path = "Outputs/Models/Difference/Multivariate_measerrorXYU/Linear_models",
+       width = 15, height = 15, units = "cm")
 
 # NS as Ellenberg predictors
 mcmc_plot(mod_whw_ns, type = "areas_ridges") + 
