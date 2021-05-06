@@ -7,6 +7,7 @@ theme_set(theme_classic())
 library(patchwork)
 library(tidybayes)
 library(emmeans)
+mang_cols <- unname(palette.colors()[c(2,6)])
 
 # summary statistics
 X_Ell %>% select(Year, contains("_R_")) %>%
@@ -427,8 +428,9 @@ sm_uw <- sm_r_uw_hab_mod %>%
   scale_y_continuous(limits = c(4,6)) +
   labs(y = bquote("Unweighted Ellenberg R 4m"^2))
 
-wh_w + wh_uw + sm_w + sm_uw + plot_layout(guides = "collect") 
-ggsave("Ellenberg R versus time by Management variable y limits.png",
+wh_w + wh_uw + sm_w + sm_uw + plot_layout(guides = "collect") &
+  scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill"))
+ggsave("Ellenberg R versus time by Management variable y limits new cols.png",
        path = "Outputs/Models/Year_models/",
        width = 20, height = 20, units = "cm")
 
@@ -579,9 +581,11 @@ sm_uw <- sm_r_uw_hab_me_mod %>%
   scale_y_continuous(limits = c(4,6)) +
   labs(y = bquote("Unweighted Ellenberg R 4m"^2))
 
-wh_w + wh_uw + sm_w + sm_uw + plot_layout(guides = "collect")
-ggsave("Ellenberg R versus time by Management with measurement error.png",
-       path = "Outputs/Models/Year_models/", width = 20, height = 15, units = "cm")
+wh_w + wh_uw + sm_w + sm_uw + plot_layout(guides = "collect") &
+  scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill")) &
+  scale_y_continuous(expand = c(0,0), limits = c(4.25,5.75))
+ggsave("Ellenberg R versus time by Management with measurement error new cols.png",
+       path = "Outputs/Models/Year_models/", width = 20, height = 20, units = "cm")
 
 # pH models ####
 mod_data <- mutate(Comb, 
@@ -621,9 +625,10 @@ ph_pl <- ph_hab_mod %>%
   ggplot(aes(x = Year, y = .value,
              fill = Management, colour = Management)) +
   stat_lineribbon(alpha = 1/4) +
-  labs(y = "pH")
+  labs(y = "pH") +
+  scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill"))
 ph_pl
-ggsave("pH versus time by Management.png", 
+ggsave("pH versus time by Management new cols.png", 
        path = "Outputs/Models/Year_models/",
        width = 12, height = 8, units = "cm")
 
@@ -724,8 +729,9 @@ phc_pl <- ph_c_hab_me_mod %>%
   stat_lineribbon(alpha = 1/4) +
   labs(y = bquote("pH CaCl"[2]))
 ph_pl  + phc_pl + plot_layout(guides = "collect") &
-  scale_y_continuous(limits = c(4.2,6.2)) 
-ggsave("pH against year with measurement error.png",
+  scale_y_continuous(limits = c(4.2,6.2)) &
+  scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill"))
+ggsave("pH against year with measurement error new cols.png",
        path = "Outputs/Models/Year_models/",
        width = 20, height = 12, units = "cm")
 
@@ -840,8 +846,9 @@ wh_uw + labs(y = "Ellenberg R") + scale_y_continuous() +
   plot_layout(ncol = 2, guides = "collect") +
   plot_annotation(tag_levels = "a") &
   scale_x_continuous(limits = c(1970,2020), expand = c(0,0)) &
+  scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill")) &
   theme(plot.margin = margin(5.5,10,5.5,5.5)) 
-ggsave("Change in Ell R wh_uw pH Sdep and Ndep over time with labels.png",
+ggsave("Change in Ell R wh_uw pH Sdep and Ndep over time with labels new cols.png",
        path = "Outputs/Models/Year_Models/",
        width = 15, height = 10, units = "cm", scale = 1.25)
 
