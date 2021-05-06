@@ -67,7 +67,7 @@ CS07_PH <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS2007_PH_LOI_DATA"))
 CS78_PH <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS1978_PH_LOI_DATA"))
 CS98_PH <- dbReadTable(MWA_masq, SQL("DB_MASQ.CS1998_PH_LOI_DATA"))
 UK19_PH <- read.csv("Outputs/UK19_PHLOI.csv")
-
+UK20_PH <- read.csv("Outputs/UKCEHCS2020v1.csv", na.strings = -9999.9999)
 
 # Total C and N data ####
 UK19_CN <- read_excel("Outputs/UKSCAPE Field Survey 2019 CHEMICAL DARv5.xls",

@@ -9,11 +9,13 @@ CS78_PH$REP_ID <- paste(CS78_PH$SQUARE_NUM,CS78_PH$REP_NUM, sep = "X")
 CS98_PH$REP_ID <- paste(CS98_PH$SQUARE_NUM,CS98_PH$REP_NUM, sep = "X")
 CS07_PH$REP_ID <- paste(CS07_PH$SQUARE_NUM,CS07_PH$REP_NUM, sep = "X")
 UK19_PH$REP_ID <- paste(UK19_PH$SQUARE_NUM,UK19_PH$REP_NUM, sep = "X")
+UK20_PH$REP_ID <- paste(UK20_PH$Square.number,UK20_PH$X.plot, sep = "")
 
 PH_mod <- full_join(select(CS78_PH, REP_ID, PH1978),
                     select(CS98_PH, REP_ID, PH1998 = PHF2000)) %>%
   full_join(select(CS07_PH, REP_ID, PH2007 = PH2007_IN_WATER)) %>%
   full_join(select(UK19_PH, REP_ID, PH2019 = PH_DIW)) %>%
+  full_join(select(UK20_PH, REP_ID, PH2020 = pH.Deionised.water)) %>%
   pivot_longer(starts_with("PH"), values_to = "pH",
                values_drop_na = TRUE, names_prefix = "PH") %>%
   mutate(year = as.numeric(name),
@@ -21,6 +23,7 @@ PH_mod <- full_join(select(CS78_PH, REP_ID, PH1978),
          YRnm = as.integer(YR),
          SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "X"), "[",1)),
          REP_PLOT = sapply(strsplit(REP_ID, "X"), "[",2)) %>%
+  mutate(YRnm = ifelse(YRnm == 5, 4, YRnm)) %>%
   left_join(select(landclass_dat, SERIES_NUM, LC07))
 str(PH_mod)
 summary(PH_mod)
@@ -81,10 +84,14 @@ plot(modNat, resid(., type = "p") ~ fitted(.)|YR, abline = 0,
 
 # no improvement when incorporating habitat info
 
-## obtain yearly predictions and confidence estimates from the fitted model and store as simple table
-out_dat_pred <- data.frame(Year=as.numeric(as.character(sort(unique(PH_mod$YR)))),Estimated_Value =summary(modNat)$tTable[,1],
-                           Lower_est.Mod = summary(modNat)$tTable[,1]-(1.96*summary(modNat)$tTable[,2]),
-                           Upper_est.Mod = summary(modNat)$tTable[,1]+(1.96*summary(modNat)$tTable[,2])
+## obtain yearly predictions and confidence estimates from the fitted model and store
+## as simple table
+out_dat_pred <- data.frame(Year=as.numeric(as.character(sort(unique(PH_mod$YR)))),
+                           Estimated_Value =summary(modNat)$tTable[,1],
+                           Lower_est.Mod = summary(modNat)$tTable[,1]-
+                             (1.96*summary(modNat)$tTable[,2]),
+                           Upper_est.Mod = summary(modNat)$tTable[,1]+
+                             (1.96*summary(modNat)$tTable[,2])
 )
 out_dat_pred
 
@@ -112,9 +119,8 @@ for(j in 1:(dim(N_tab)[1])){
   }
 }
 
-
 #create an empty matrix to store results in 
-boot_ESTS=matrix(nrow=1000,ncol=4)
+boot_ESTS=matrix(nrow=1000,ncol=5)
 
 #we run 1000 bootstrap resamples
 for(isim in 1:1000){
@@ -153,28 +159,37 @@ names(All_Ests)[5:6] <- c("Lower_Boot","Upper_Boot")
 print(All_Ests)
 ggplot(All_Ests, aes(x = Year)) +
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), 
+              alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), 
+              alpha = 0.1, fill = "#2F7ECE") +
   geom_point(aes(y = Estimated_Value), size = 3) +
   geom_linerange(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod)) +
   geom_linerange(aes(ymin = Lower_Boot, ymax = Upper_Boot), size = 2) +
   labs(y = "pH")
-ggsave("pH by year model outputs bootstrap LC.png", path = "Outputs/Graphs/",
+ggsave("pH by year incl 2020 model outputs bootstrap LC.png", 
+       path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 ggplot(All_Ests, aes(x = Year)) +
-  geom_jitter(data = PH_mod, aes(x = year, y = pH), colour = "grey", alpha = 0.05, width = 1, height = 0) +
-  # geom_dotplot(data = PH_mod, aes(x = year, y = pH, group = year), binaxis = "y", stackdir = "center",
+  # geom_jitter(data = PH_mod, aes(x = year, y = pH), colour = "grey", 
+  #             alpha = 0.05, width = 1, height = 0) +
+  # geom_dotplot(data = PH_mod, aes(x = year, y = pH, group = year),
+  #              binaxis = "y", stackdir = "center",
   #              fill = "#2F7ECE", alpha = 0.05, width = 1, binwidth = 0.02) +
-  geom_boxplot(data = PH_mod, aes(x = year, y = pH, group = year), colour = "grey20", alpha = 0.2, width = 1) +
+  geom_boxplot(data = PH_mod, aes(x = year, y = pH, group = year), 
+               colour = "grey20", alpha = 0.2, width = 0.95) +
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), 
+              alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), 
+              alpha = 0.1, fill = "#2F7ECE") +
   geom_point(aes(y = Estimated_Value), colour = "#2F7ECE") +
   # geom_linerange(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod)) +
   # geom_linerange(aes(ymin = Lower_Boot, ymax = Upper_Boot), size = 2) 
   labs(y = "pH")
-ggsave("pH by year model bootstrap LC and data.png", path = "Outputs/Graphs/",
+ggsave("pH by year incl 2020 model bootstrap LC and data.png",
+       path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 
@@ -183,7 +198,8 @@ ggsave("pH by year model bootstrap LC and data.png", path = "Outputs/Graphs/",
 LOI <- full_join(select(CS78_PH, REP_ID, LOI1978),
                  select(CS98_PH, REP_ID, LOI1998 = LOI2000)) %>%
   full_join(select(CS07_PH, REP_ID, LOI2007)) %>%
-  full_join(select(UK19_PH, REP_ID, LOI2019 = LOI)) %>%
+  full_join(select(UK19_CN, REP_ID, LOI2019 = `LOI%...13`)) %>%
+  full_join(select(UK20_PH, REP_ID, LOI2020 = LOI.)) %>%
   pivot_longer(starts_with("LOI"), values_to = "LOI",
                values_drop_na = TRUE, names_prefix = "LOI") %>%
   mutate(year = as.numeric(name),
@@ -192,7 +208,8 @@ LOI <- full_join(select(CS78_PH, REP_ID, LOI1978),
          SERIES_NUM = sapply(strsplit(REP_ID, "X"), "[",1),
          REP_PLOT = sapply(strsplit(REP_ID, "X"), "[",2),
          LOI_pr = 0.01*LOI,
-         CARBO_LOI = 5.5*LOI)
+         CARBO_LOI = 5.5*LOI) %>%
+  mutate(YRnm = ifelse(YRnm >4, 4, YRnm))
 str(LOI)
 summary(LOI)
 
@@ -217,21 +234,21 @@ plot(modloi.emm.s, comparisons = TRUE)
 # qqp(resid(modLOI), main = "log(LOI) ~ year model")
 # plot(modLOI, main = "log(LOI) ~ year model")
 # 
-library(glmmTMB)
-modLOI <- glmmTMB(LOI_pr ~ YR - 1 + (1|SERIES_NUM) +
-                    ar1(YRnm + 0|REP_ID),
-                  data= LOI, family = beta_family(),
-                  na.action = na.omit)
-summary(modLOI)
-# 
-# 
-# modLOI_noar <- glmmTMB(LOI_pr ~ YR - 1 + (1|SERIES_NUM),
+# library(glmmTMB)
+# modLOI <- glmmTMB(LOI_pr ~ YR - 1 + (1|SERIES_NUM) +
+#                     ar1(YRnm + 0|REP_ID),
 #                   data= LOI, family = beta_family(),
 #                   na.action = na.omit)
-# 
-# # check residuals using DHARMa 
-resLOI_noar <- simulateResiduals(modLOI_noar)
-plot(resLOI_noar)
+# summary(modLOI)
+# # 
+# # 
+# # modLOI_noar <- glmmTMB(LOI_pr ~ YR - 1 + (1|SERIES_NUM),
+# #                   data= LOI, family = beta_family(),
+# #                   na.action = na.omit)
+# # 
+# # # check residuals using DHARMa 
+# resLOI_noar <- simulateResiduals(modLOI_noar)
+# plot(resLOI_noar)
 
 # Bootstrapping
 
@@ -240,7 +257,8 @@ plot(resLOI_noar)
 
 #to set up the bootstrapping, we create a list whereby each entry contains the
 #row IDs for corresponding entried for the specific year*landclass combination
-LOI <- LOI %>% mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "X"), "[", 1))) %>%
+LOI <- LOI %>% 
+  mutate(SERIES_NUM = as.numeric(sapply(strsplit(REP_ID, "X"), "[", 1))) %>%
   left_join(select(landclass_dat, SERIES_NUM, LC07))
 summary(LOI)
 
@@ -257,7 +275,7 @@ for(j in 1:(dim(N_tab)[1])){
 
 
 #create an empty matrix to store results in 
-boot_ESTS=matrix(nrow=1000,ncol=4)
+boot_ESTS=matrix(nrow=1000,ncol=5)
 
 #we run 1000 bootstrap resamples
 for(isim in 1:1000){
@@ -285,9 +303,12 @@ for(isim in 1:1000){
   
 } 
 
-out_dat_pred <- data.frame(Year=as.numeric(as.character(sort(unique(LOI$YR)))),Estimated_Value =summary(modLOI)$tTable[,1],
-                           Lower_est.Mod = summary(modLOI)$tTable[,1]-(1.96*summary(modLOI)$tTable[,2]),
-                           Upper_est.Mod = summary(modLOI)$tTable[,1]+(1.96*summary(modLOI)$tTable[,2])
+out_dat_pred <- data.frame(Year=as.numeric(as.character(sort(unique(LOI$YR)))),
+                           Estimated_Value =summary(modLOI)$tTable[,1],
+                           Lower_est.Mod = summary(modLOI)$tTable[,1]-
+                             (1.96*summary(modLOI)$tTable[,2]),
+                           Upper_est.Mod = summary(modLOI)$tTable[,1]+
+                             (1.96*summary(modLOI)$tTable[,2])
 )
 out_dat_pred
 
@@ -302,24 +323,32 @@ names(All_Ests)[5:6] <- c("Lower_Boot","Upper_Boot")
 print(All_Ests)
 ggplot(All_Ests, aes(x = Year)) +
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), 
+              alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), 
+              alpha = 0.1, fill = "#2F7ECE") +
   geom_point(aes(y = Estimated_Value), size = 3) +
   geom_linerange(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod)) +
   geom_linerange(aes(ymin = Lower_Boot, ymax = Upper_Boot), size = 2) +
   labs(y = "LOI (%)")
-ggsave("LOI by year model outputs bootstrap LC.png", path = "Outputs/Graphs/",
+ggsave("LOI by year incl 2020 model outputs bootstrap LC.png", 
+       path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 ggplot(All_Ests, aes(x = Year)) +
-  geom_jitter(data = LOI, aes(x = year, y = LOI), colour = "grey", alpha = 0.05, width = 1, height = 0) +
-  geom_boxplot(data = LOI, aes(x = year, y = LOI, group = year), colour = "grey20", alpha = 0.2, width = 1) +
+  # geom_jitter(data = LOI, aes(x = year, y = LOI), colour = "grey", 
+  #             alpha = 0.05, width = 1, height = 0) +
+  geom_boxplot(data = LOI, aes(x = year, y = LOI, group = year), 
+               colour = "grey20", alpha = 0.2, width = 0.95) +
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), 
+              alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), 
+              alpha = 0.1, fill = "#2F7ECE") +
   geom_point(aes(y = Estimated_Value), colour = "#2F7ECE") +
   labs(y = "LOI (%)")
-ggsave("LOI by year model bootstrap LC and data.png", path = "Outputs/Graphs/",
+ggsave("LOI by year incl 2020 model bootstrap LC and data.png", 
+       path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 
@@ -384,9 +413,12 @@ for(isim in 1:1000){
   
 } 
 
-out_dat_pred_log <- data.frame(Year=as.numeric(as.character(sort(unique(LOI$YR)))),Estimated_Value =summary(modLOI)$tTable[,1],
-                               Lower_est.Mod = summary(modLOI)$tTable[,1]-(1.96*summary(modLOI)$tTable[,2]),
-                               Upper_est.Mod = summary(modLOI)$tTable[,1]+(1.96*summary(modLOI)$tTable[,2])
+out_dat_pred_log <- data.frame(Year=as.numeric(as.character(sort(unique(LOI$YR)))),
+                               Estimated_Value =summary(modLOI)$tTable[,1],
+                               Lower_est.Mod = summary(modLOI)$tTable[,1]-
+                                 (1.96*summary(modLOI)$tTable[,2]),
+                               Upper_est.Mod = summary(modLOI)$tTable[,1]+
+                                 (1.96*summary(modLOI)$tTable[,2])
 )
 out_dat_pred_log
 
@@ -404,8 +436,10 @@ All_Ests_log_tr <- as.data.frame(
 print(All_Ests_log_tr)
 ggplot(All_Ests_log_tr, aes(x = Year)) +
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), 
+              alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot),
+              alpha = 0.1, fill = "#2F7ECE") +
   geom_point(aes(y = Estimated_Value), size = 3) +
   geom_linerange(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod)) +
   geom_linerange(aes(ymin = Lower_Boot, ymax = Upper_Boot), size = 2) +
@@ -421,25 +455,34 @@ LOI_mean <- LOI %>%
          lower_mean = mean_LOI - se_LOI)
 
 ggplot(All_Ests_log_tr, aes(x = Year)) +
-  geom_jitter(data = LOI, aes(x = year, y = LOI), colour = "grey", alpha = 0.05, width = 1, height = 0) +
-  geom_boxplot(data = LOI, aes(x = year, y = LOI, group = year), colour = "grey20", alpha = 0.2, width = 1) +
+  geom_jitter(data = LOI, aes(x = year, y = LOI), colour = "grey", 
+              alpha = 0.05, width = 1, height = 0) +
+  geom_boxplot(data = LOI, aes(x = year, y = LOI, group = year), 
+               colour = "grey20", alpha = 0.2, width = 1) +
   # geom_pointrange(data = LOI_mean, aes(x = year, y = mean_LOI,
-  #                                 ymax = upper_mean, ymin = lower_mean), size = 0.1) +
+  #                                      ymax = upper_mean, ymin = lower_mean),
+  #                 size = 0.1) +
   
   # log
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#2F7ECE") +
-  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), 
+              alpha = 0.1, fill = "#2F7ECE") +
+  geom_ribbon(aes(ymin = Lower_Boot, ymax = Upper_Boot), 
+              alpha = 0.1, fill = "#2F7ECE") +
   geom_point(aes(y = Estimated_Value), colour = "#2F7ECE") +
   
   # non log
-  geom_line(data = All_Ests, aes(y = Estimated_Value), lty = "dotted", colour = "#4DA43A") +
-  geom_ribbon(data = All_Ests, aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#4DA43A") +
-  geom_ribbon(data = All_Ests, aes(ymin = Lower_Boot, ymax = Upper_Boot), alpha = 0.1, fill = "#4DA43A") +
+  geom_line(data = All_Ests, aes(y = Estimated_Value), 
+            lty = "dotted", colour = "#4DA43A") +
+  geom_ribbon(data = All_Ests, aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), 
+              alpha = 0.1, fill = "#4DA43A") +
+  geom_ribbon(data = All_Ests, aes(ymin = Lower_Boot, ymax = Upper_Boot), 
+              alpha = 0.1, fill = "#4DA43A") +
   geom_point(data = All_Ests, aes(y = Estimated_Value), colour = "#4DA43A") +
   
   labs(y = "LOI (%)")
-ggsave("LOI by year log blue nolog green model bootstrap LC and data.png", path = "Outputs/Graphs/",
+ggsave("LOI by year log blue nolog green model bootstrap LC and data.png", 
+       path = "Outputs/Graphs/",
        width = 12, height = 10, units = "cm")
 
 # Bayesian version ####
@@ -549,9 +592,12 @@ modLOI <- lme(LOI ~ YR - 1, random = ~1|SERIES_NUM,
               correlation = corAR1(form = ~YRnm|SERIES_NUM/REP_PLOT),
               na.action = na.omit)
 
-out_dat_pred <- data.frame(Year=as.numeric(as.character(sort(unique(LOI$YR)))),Estimated_Value =summary(modLOI)$tTable[,1],
-                           Lower_est.Mod = summary(modLOI)$tTable[,1]-(1.96*summary(modLOI)$tTable[,2]),
-                           Upper_est.Mod = summary(modLOI)$tTable[,1]+(1.96*summary(modLOI)$tTable[,2])
+out_dat_pred <- data.frame(Year=as.numeric(as.character(sort(unique(LOI$YR)))),
+                           Estimated_Value =summary(modLOI)$tTable[,1],
+                           Lower_est.Mod = summary(modLOI)$tTable[,1]-
+                             (1.96*summary(modLOI)$tTable[,2]),
+                           Upper_est.Mod = summary(modLOI)$tTable[,1]+
+                             (1.96*summary(modLOI)$tTable[,2])
 )
 out_dat_pred
 
@@ -575,12 +621,14 @@ All_Ests <- cbind(out_dat_pred,
 All_Ests
 
 ggplot(All_Ests, aes(x = Year)) +
-  geom_jitter(data = LOI, aes(x = year, y = LOI), colour = "grey", alpha = 0.05, width = 1, height = 0) +
+  geom_jitter(data = LOI, aes(x = year, y = LOI), colour = "grey", 
+              alpha = 0.05, width = 1, height = 0) +
   geom_boxplot(data = LOI, aes(x = year, y = LOI, group = year), 
                colour = "grey20", alpha = 0.2, width = 1,
                outlier.shape = NA) +
   geom_pointrange(data = LOI_mean, aes(x = year, y = mean_LOI,
-                                       ymax = upper_mean, ymin = lower_mean), size = 0.1) +
+                                       ymax = upper_mean, ymin = lower_mean),
+                  size = 0.1) +
   
   # Bayes - blue
   geom_line(aes(y = Estimate), lty = "dotted", colour = "#2F7ECE") +
@@ -589,12 +637,14 @@ ggplot(All_Ests, aes(x = Year)) +
   
   # # Bayes - purple
   # geom_line(aes(y = Estimate_med), lty = "dotted", colour = "purple") +
-  # geom_ribbon(aes(ymin = Q2.5_med, ymax = Q97.5_med), alpha = 0.1, fill = "purple") +
+  # geom_ribbon(aes(ymin = Q2.5_med, ymax = Q97.5_med), 
+  #             alpha = 0.1, fill = "purple") +
   # geom_point(aes(y = Estimate_med), colour = "purple") +
   # 
   # nlme - green
   geom_line(aes(y = Estimated_Value), lty = "dotted", colour = "#4DA43A") +
-  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod), alpha = 0.1, fill = "#4DA43A") +
+  geom_ribbon(aes(ymin = Lower_est.Mod, ymax = Upper_est.Mod),
+              alpha = 0.1, fill = "#4DA43A") +
   geom_point(aes(y = Estimated_Value), colour = "#4DA43A") +
   
   # nlme log - pink
