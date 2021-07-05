@@ -434,6 +434,31 @@ ggsave("Ellenberg R versus time by Management variable y limits new cols.png",
        path = "Outputs/Models/Year_models/",
        width = 20, height = 20, units = "cm")
 
+pp_check(sm_r_uw_hab_mod, type = "ecdf_overlay", 
+         nsamples = 50) +
+  ggtitle("Small unweighted Ellenberg R") +
+  pp_check(sm_r_w_hab_mod, type = "ecdf_overlay", 
+           nsamples = 50) +
+  ggtitle("Small weighted Ellenberg R") +
+  pp_check(wh_r_uw_hab_mod, type = "ecdf_overlay", 
+           nsamples = 50) +
+  ggtitle("Large unweighted Ellenberg R") +
+  pp_check(wh_r_w_hab_mod, type = "ecdf_overlay", 
+           nsamples = 50) +
+  ggtitle("Large weighted Ellenberg R") +
+  pp_check(ph_hab_mod, type = "ecdf_overlay",
+           nsamples = 50) +
+  ggtitle("pH (DIW)") +
+  pp_check(ph_c_hab_mod, type = "ecdf_overlay",
+           nsamples = 50) +
+  ggtitle(bquote("pH (CaCl"[2]*")")) +
+  plot_layout(ncol = 3, guides = "collect", byrow = FALSE) &
+  theme(plot.title = element_text(size = 12))
+ggsave("ECDF pp_check all 6 models no me.png",
+       path = "Outputs/Models/Year_models/",
+       width = 20, height = 10, units = "cm")
+
+
 # Ell w/meas error ####
 
 ELL_QA_year <- data.frame(

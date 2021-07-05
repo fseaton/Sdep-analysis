@@ -1316,10 +1316,14 @@ sdep_pl <- plot(conditional_effects(pH_Sdep_mod), points = TRUE, plot = FALSE)[[
 ndep_pl <- plot(conditional_effects(pH_Ndep_mod), points = TRUE, plot = FALSE)[[3]]
 sdep_pl + labs(x = expression("Change in S deposition (kg S ha"^-1*")"), 
                y = "pH change") + 
+  scale_x_continuous(labels = c(-20,-10,0),
+                     breaks = c(-2,0,2)) +
   scale_color_manual(values = mang_cols,
                      aesthetics = c("color","fill")) +
   ndep_pl + labs(x = expression("Cumulative N deposition (kg N ha"^-1*")"), 
                  y = "pH change")  + 
+  scale_x_continuous(breaks = c(-2,-1,0,1),
+                     labels = c(50,150,250,350)) +
   scale_color_manual(values = mang_cols,
                      aesthetics = c("color","fill")) +
   plot_layout(guides = "collect")
@@ -1343,6 +1347,57 @@ write.csv(param_summaries, paste0(dir_mods,"pH_NSdep_mods_params.csv"))
 
 
 # 5km ####
+mdr <- "Outputs/Models/Difference/Univariate_measerror/1v5km_comp/"
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Predictor = as.numeric(scale(Sdep/8, 
+                                      center = TRUE,
+                                      scale = FALSE))) %>%
+  select(REP_ID, SQUARE, YRnm, PH, PH_SE = PH_DIW_SE_NORM,
+         Predictor, Management) %>%
+  na.omit() 
+mod_pr <- c(prior(normal(0,0.5), class = "b"),
+            prior(normal(0,0.25), class = "Intercept"),
+            prior(normal(0,1), class = "ar"),
+            prior(student_t(3,0,1), class = "sd"),
+            prior(student_t(3,0,1), class = "sigma"))
+
+set.seed(78342835)
+ph_Sdep1_diff <- brm(PH | mi(PH_SE) ~ Predictor*Management + 
+                       (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
+                     data = mod_data, prior = mod_pr, 
+                     cores = 4, iter = 20000, thin = 4,
+                     save_pars = save_pars(all = TRUE, latent = TRUE), 
+                     seed = 78342835,
+                     file = paste0(mdr,"PH_Sdep1km_HAB"))
+
+summary(ph_Sdep1_diff)
+plot(ph_Sdep1_diff, ask = FALSE)
+
+mod_data <- ELL_pH %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Predictor = as.numeric(scale(Ndep/8, 
+                                      center = TRUE,
+                                      scale = FALSE))) %>%
+  select(REP_ID, SQUARE, YRnm, PH, PH_SE = PH_DIW_SE_NORM,
+         Predictor, Management) %>%
+  na.omit() 
+set.seed(78342835)
+ph_Ndep1_diff <- update(ph_Sdep1_diff,
+                        newdata = mod_data, 
+                        cores = 4, iter = 20000, thin = 4,
+                        save_pars = save_pars(all = TRUE, latent = TRUE), 
+                        seed = 78342835,
+                        file = paste0(mdr,"PH_Ndep1km_HAB"))
+
+summary(ph_Ndep1_diff)
+plot(ph_Ndep1_diff, ask = FALSE)
+
+
 mod_data <- ELL_pH %>%
   left_join(select(CS_plot_atdep_5km, REP_ID, Year, 
                    Ndep_5km= Ndep, Sdep_5km = Sdep) %>%
@@ -1350,125 +1405,118 @@ mod_data <- ELL_pH %>%
   filter(!is.na(Management)) %>%
   mutate(YRnm = as.integer(as.factor(Year)),
          SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
-         Sdep_5km = as.numeric(scale(Sdep_5km, 
-                                     center = -10,
-                                     scale = 5)),
-         Ndep_5km = as.numeric(scale(Ndep_5km,
-                                     center = 250,
-                                     scale = 100))) %>%
+         Predictor = as.numeric(scale(Sdep_5km/20, 
+                                     center = TRUE,
+                                     scale = FALSE))) %>%
   select(REP_ID, SQUARE, YRnm, PH, PH_SE = PH_DIW_SE_NORM,
-         Sdep_5km, Ndep_5km, Management) %>%
+         Predictor, Management) %>%
   na.omit() 
-mod_pr <- mod_pr <- c(prior(normal(0,0.5), class = "b"),
-                      prior(normal(0,0.25), class = "Intercept"),
-                      prior(normal(0,1), class = "ar"),
-                      prior(student_t(3,0,1), class = "sd"),
-                      prior(student_t(3,0,1), class = "sigma"))
 
 set.seed(78342835)
-ph_Sdep5_diff <- brm(PH | mi(PH_SE) ~ Sdep_5km*Management + 
-                       (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                     data = mod_data, prior = mod_pr, 
-                     cores = 4, iter = 20000, thin = 4,
-                     save_pars = save_pars(all = TRUE, latent = TRUE), 
-                     seed = 78342835,
-                     file = "Outputs/Models/Difference/Univariate_measerror/PH_Sdep5km_HAB")
+ph_Sdep5_diff <- update(ph_Sdep1_diff,
+                        newdata = mod_data, 
+                        cores = 4, iter = 20000, thin = 4,
+                        save_pars = save_pars(all = TRUE, latent = TRUE), 
+                        seed = 78342835,
+                        file = paste0(mdr,"PH_Sdep5km_HAB"))
 
 summary(ph_Sdep5_diff)
 plot(ph_Sdep5_diff, ask = FALSE)
 
-set.seed(78342835)
-ph_Ndep5_diff <- brm(PH | mi(PH_SE) ~ Ndep_5km*Management + 
-                       (1|SQUARE) + ar(time = YRnm, gr = REP_ID),
-                     data = mod_data, prior = mod_pr, 
-                     cores = 4, iter = 20000, thin = 4,
-                     save_pars = save_pars(all = TRUE, latent = TRUE), 
-                     seed = 78342835,
-                     file = "Outputs/Models/Difference/Univariate_measerror/PH_Ndep5km_HAB")
-summary(ph_Ndep5_diff)
-plot(ph_Ndep5_diff, ask = FALSE)
-
-# Compare scales:
-ELL_pH %>%
+mod_data <- ELL_pH %>%
   left_join(select(CS_plot_atdep_5km, REP_ID, Year, 
                    Ndep_5km= Ndep, Sdep_5km = Sdep) %>%
               mutate(Year = ifelse(Year == 2018, 2019, Year))) %>%
   filter(!is.na(Management)) %>%
-  select(REP_ID, PH, PH_SE = PH_DIW_SE_NORM,
-         Sdep_5km, Ndep_5km, Sdep_1km = Sdep, Ndep_1km = Ndep, Management) %>%
-  na.omit() %>%
-  summarise(across(contains("dep"),
-                   .fns = list(mean = mean, sd = sd), 
-                   .names = "{.col}_{.fn}")) %>%
-  pivot_longer(everything(),
-               names_to = c("Predictor","Scale","Variable"),
-               names_sep = "_") %>%
-  pivot_wider(names_from = Variable, values_from = value) %>%
-  arrange(Predictor)
-# Predictor Scale   mean     sd
-# <chr>     <chr>  <dbl>  <dbl>
-#   1 Ndep      5km   414.   219.  
-# 2 Ndep      1km   134.    72.2 
-# 3 Sdep      5km   -14.2    8.99
-# 4 Sdep      1km    -5.34   4.48
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Predictor = as.numeric(scale(Ndep_5km/20, 
+                                      center = TRUE,
+                                      scale = FALSE))) %>%
+  select(REP_ID, SQUARE, YRnm, PH, PH_SE = PH_DIW_SE_NORM,
+         Predictor, Management) %>%
+  na.omit() 
+
+set.seed(78342835)
+ph_Ndep5_diff <- update(ph_Sdep1_diff,
+                        newdata = mod_data, 
+                        cores = 4, iter = 20000, thin = 4,
+                        save_pars = save_pars(all = TRUE, latent = TRUE), 
+                        seed = 78342835,
+                        file = paste0(mdr,"PH_Ndep5km_HAB"))
+summary(ph_Ndep5_diff)
+plot(ph_Ndep5_diff, ask = FALSE)
+
+mod_data <- ELL_pH %>%
+  left_join(select(CS_plot_atdep5km8yr, REP_ID, Year, 
+                   Ndep_5km= Ndep, Sdep_5km = Sdep) %>%
+              mutate(Year = ifelse(Year == 2018, 2019, Year))) %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Predictor = as.numeric(scale(Sdep_5km/8, 
+                                      center = TRUE,
+                                      scale = FALSE))) %>%
+  select(REP_ID, SQUARE, YRnm, PH, PH_SE = PH_DIW_SE_NORM,
+         Predictor, Management) %>%
+  na.omit() 
+
+set.seed(78342835)
+ph_Sdep5_8diff <- update(ph_Sdep1_diff,
+                         newdata = mod_data, 
+                         cores = 4, iter = 20000, thin = 4,
+                         save_pars = save_pars(all = TRUE, latent = TRUE), 
+                         seed = 78342835,
+                         file = paste0(mdr,"PH_Sdep5km8yr_HAB"))
+
+summary(ph_Sdep5_8diff)
+plot(ph_Sdep5_8diff, ask = FALSE)
+
+mod_data <- ELL_pH %>%
+  left_join(select(CS_plot_atdep5km8yr, REP_ID, Year, 
+                   Ndep_5km= Ndep, Sdep_5km = Sdep) %>%
+              mutate(Year = ifelse(Year == 2018, 2019, Year))) %>%
+  filter(!is.na(Management)) %>%
+  mutate(YRnm = as.integer(as.factor(Year)),
+         SQUARE = sapply(strsplit(REP_ID, "[A-Z]"),"[",1),
+         Predictor = as.numeric(scale(Ndep_5km/8, 
+                                      center = TRUE,
+                                      scale = FALSE))) %>%
+  select(REP_ID, SQUARE, YRnm, PH, PH_SE = PH_DIW_SE_NORM,
+         Predictor, Management) %>%
+  na.omit() 
+
+set.seed(78342835)
+ph_Ndep5_8diff <- update(ph_Sdep1_diff,
+                        newdata = mod_data, 
+                        cores = 4, iter = 20000, thin = 4,
+                        save_pars = save_pars(all = TRUE, latent = TRUE), 
+                        seed = 78342835,
+                        file = paste0(mdr,"PH_Ndep5km8yr_HAB"))
+summary(ph_Ndep5_8diff)
+plot(ph_Ndep5_8diff, ask = FALSE)
+
 
 plot_pars <- c("b_Predictor","b_ManagementLow","b_Predictor:ManagementLow")
 post <- do.call(rbind, list(
-  posterior_samples(pH_Sdep_mod, pars = plot_pars) %>% 
+  posterior_samples(ph_Sdep1_diff, pars = plot_pars) %>% 
     mutate(Model = "Sdep (1km)"),
-  posterior_samples(pH_Ndep_mod, pars = plot_pars) %>% 
-    mutate(Model = "Ndep (1km)"))) %>%
+  posterior_samples(ph_Ndep1_diff, pars = plot_pars) %>% 
+    mutate(Model = "Ndep (1km)"),
+  posterior_samples(ph_Sdep5_diff, pars = plot_pars) %>% 
+    mutate(Model = "Sdep (5km-20yr)"),
+  posterior_samples(ph_Ndep5_diff, pars = plot_pars) %>% 
+    mutate(Model = "Ndep (5km-20yr)"),
+  posterior_samples(ph_Sdep5_8diff, pars = plot_pars) %>% 
+    mutate(Model = "Sdep (5km-8yr)"),
+  posterior_samples(ph_Ndep5_8diff, pars = plot_pars) %>% 
+    mutate(Model = "Ndep (5km-8yr)"))) %>%
   transmute(High = b_Predictor,
             Low = b_Predictor + `b_Predictor:ManagementLow`,
             Model = Model) 
-post %>% group_by(Model) %>%
-  summarise(across(High:Low,
-            list(mean = mean, sd = sd)))
-# Model      High_mean High_sd Low_mean Low_sd
-# <chr>          <dbl>   <dbl>    <dbl>  <dbl>
-#   1 Ndep (1km)     0.120  0.0421   0.0687 0.0237
-# 2 Sdep (1km)    -0.112  0.0275  -0.133  0.0221
+
+
 post %>%
-  tidyr::pivot_longer(c(High, Low), "Management", 
-                      "value") %>%
-  ggplot(aes(x = value, group = Management, 
-             color = Management, fill = Management)) +
-  geom_density(alpha = 1/4) +
-  facet_grid(~Model, scale = "free_x") +
-  scale_x_continuous("Parameter estimate", expand = c(0, 0)) +
-  scale_y_continuous(NULL, breaks = NULL, expand = c(0,0)) +
-  scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill")) 
-
-post5 <- do.call(rbind, list(
-  posterior_samples(ph_Sdep5_diff, pars = c("b_Sdep_5km",
-                                          "b_ManagementLow",
-                                          "b_Sdep_5km:ManagementLow")) %>% 
-    mutate(Model = "Sdep (5km)") %>%
-    rename(b_Predictor = b_Sdep_5km,
-           b_Pred_Man = `b_Sdep_5km:ManagementLow`),
-  posterior_samples(ph_Ndep5_diff, pars = c("b_Ndep_5km",
-                                          "b_ManagementLow",
-                                          "b_Ndep_5km:ManagementLow")) %>% 
-    mutate(Model = "Ndep (5km)") %>%
-    rename(b_Predictor = b_Ndep_5km,
-           b_Pred_Man = `b_Ndep_5km:ManagementLow`))) %>%
-  transmute(High = b_Predictor,
-            Low = b_Predictor + b_Pred_Man,
-            Model = Model)
-post5 %>% group_by(Model) %>%
-  summarise(across(.fns = list(mean, sd)))
-post5 %>%
-  tidyr::pivot_longer(c(High, Low), "Management", 
-                      "value") %>%
-  ggplot(aes(x = value, group = Management, 
-             color = Management, fill = Management)) +
-  geom_density(alpha = 1/4) +
-  facet_grid(~Model, scale = "free_x") +
-  scale_x_continuous("Parameter estimate", expand = c(0, 0)) +
-  scale_y_continuous(NULL, breaks = NULL, expand = c(0,0)) +
-  scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill")) 
-
-rbind(post, post5) %>%
   tidyr::pivot_longer(c(High, Low), "Management", 
                       "value") %>%
   tidyr::separate(Model, c("Predictor","Scale"),
@@ -1478,18 +1526,22 @@ rbind(post, post5) %>%
             sd = sd(value),
             Q2.5 = quantile(value, probs = 0.025),
             Q97.5 = quantile(value, probs = 0.975))
-# Predictor Scale Management Estimate     sd    Q2.5   Q97.5
-# <chr>     <chr> <chr>         <dbl>  <dbl>   <dbl>   <dbl>
-# 1 Ndep      (1km) High         0.169  0.0591  0.0534  0.285 
-# 2 Ndep      (1km) Low          0.0981 0.0343  0.0309  0.165 
-# 3 Ndep      (5km) High         0.102  0.0201  0.0626  0.142 
-# 4 Ndep      (5km) Low          0.0721 0.0110  0.0509  0.0940
-# 5 Sdep      (1km) High        -0.143  0.0352 -0.212  -0.0737
-# 6 Sdep      (1km) Low         -0.171  0.0285 -0.227  -0.116 
-# 7 Sdep      (5km) High        -0.0898 0.0190 -0.127  -0.0529
-# 8 Sdep      (5km) Low         -0.0956 0.0136 -0.122  -0.0691
+# Predictor Scale      Management Estimate      sd     Q2.5   Q97.5
+# <chr>     <chr>      <chr>         <dbl>   <dbl>    <dbl>   <dbl>
+#   1 Ndep      (1km)      High        0.0142  0.00478  0.00479  0.0237
+# 2 Ndep      (1km)      Low         0.00794 0.00273  0.00269  0.0134
+# 3 Ndep      (5km-20yr) High        0.0205  0.00403  0.0126   0.0284
+# 4 Ndep      (5km-20yr) Low         0.0144  0.00220  0.0102   0.0188
+# 5 Ndep      (5km-8yr)  High        0.0210  0.00383  0.0136   0.0284
+# 6 Ndep      (5km-8yr)  Low         0.0151  0.00209  0.0110   0.0192
+# 7 Sdep      (1km)      High       -0.234   0.0564  -0.345   -0.125 
+# 8 Sdep      (1km)      Low        -0.278   0.0455  -0.368   -0.192 
+# 9 Sdep      (5km-20yr) High       -0.352   0.0750  -0.501   -0.205 
+# 10 Sdep      (5km-20yr) Low        -0.382   0.0550  -0.488   -0.273 
+# 11 Sdep      (5km-8yr)  High       -0.227   0.0820  -0.387   -0.0676
+# 12 Sdep      (5km-8yr)  Low        -0.353   0.0663  -0.482   -0.224 
 
-pl1 <- rbind(post, post5) %>%
+pl1 <- post %>%
   tidyr::pivot_longer(c(High, Low), "Management", 
                       "value") %>%
   tidyr::separate(Model, c("Predictor","Scale"),
@@ -1503,7 +1555,8 @@ pl1 <- rbind(post, post5) %>%
   scale_x_continuous("Parameter estimate", expand = c(0, 0)) +
   scale_y_continuous(NULL, breaks = NULL, expand = c(0,0)) +
   scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill")) 
-pl2 <- rbind(post, post5) %>%
+
+pl2 <- post %>%
   tidyr::pivot_longer(c(High, Low), "Management", 
                       "value") %>%
   tidyr::separate(Model, c("Predictor","Scale"),
@@ -1517,38 +1570,39 @@ pl2 <- rbind(post, post5) %>%
   scale_x_continuous("Parameter estimate", expand = c(0, 0)) +
   scale_y_continuous(NULL, breaks = NULL, expand = c(0,0)) +
   scale_colour_manual(values = mang_cols, aesthetics = c("colour","fill")) 
-pl1 + pl2 + plot_layout(guides = "collect") #errors, can't see why
-egg::ggarrange(pl1 + theme(legend.position = "none"),pl2, nrow = 1)
-ggsave("Impact of Ndep and Sdep at 1 and 5km compared.png",
-       path = "Outputs/Models/Difference/Univariate_measerror",
-       plot = egg::ggarrange(pl1 + theme(legend.position = "none") +
-                               geom_vline(xintercept = 0, colour = "grey"),
-                             pl2 + geom_vline(xintercept = 0, colour = "grey"),
-                             nrow = 1),
-       width = 15, height = 10, units = "cm")
+egg::ggarrange(pl1 + theme(legend.position = "none"), pl2, ncol = 2)
+ggsave("Impact of Ndep and Sdep at 1 and 5km incl 8 and 20yr compared.png",
+       plot = egg::ggarrange(pl1 + theme(legend.position = "none"),
+                             pl2, ncol = 2),
+       path = mdr,
+       width = 15, height = 15, units = "cm")
 
-plot_pars <- c(parnames(pH_Ndep_mod)[1:7],"ar")
-plot_pars2 <- c(parnames(ph_Ndep5_diff)[1:7],"ar")
-plot_pars3 <- c(parnames(ph_Sdep5_diff)[1:7],"ar")
+plot_pars <- c(parnames(ph_Sdep5_diff)[1:7],"ar")
 param_summaries <- do.call(rbind, list(
-  posterior_summary(pH_Sdep_mod, pars = plot_pars) %>% 
+  posterior_summary(ph_Sdep1_diff, pars = plot_pars) %>% 
     as.data.frame() %>%
     tibble::rownames_to_column("Parameter") %>%
     mutate(Model = "Sdep_1km"),
-  posterior_summary(pH_Ndep_mod, pars = plot_pars) %>% 
+  posterior_summary(ph_Ndep1_diff, pars = plot_pars) %>% 
     as.data.frame() %>%
     tibble::rownames_to_column("Parameter") %>%
     mutate(Model = "Ndep_1km"),
-  posterior_summary(ph_Sdep5_diff, pars = plot_pars3) %>% 
+  posterior_summary(ph_Sdep5_diff, pars = plot_pars) %>% 
     as.data.frame() %>%
     tibble::rownames_to_column("Parameter") %>%
-    mutate(Model = "Sdep_5km",
-           Parameter = gsub("Sdep_5km","Predictor",Parameter)),
-  posterior_summary(ph_Ndep5_diff, pars = plot_pars2) %>% 
+    mutate(Model = "Sdep_5km_20yr"),
+  posterior_summary(ph_Ndep5_diff, pars = plot_pars) %>% 
     as.data.frame() %>%
     tibble::rownames_to_column("Parameter") %>%
-    mutate(Model = "Ndep_5km",
-           Parameter = gsub("Ndep_5km","Predictor",Parameter))
+    mutate(Model = "Ndep_5km_20yr"),
+  posterior_summary(ph_Sdep5_8diff, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "Sdep_5km_8yr"),
+  posterior_summary(ph_Ndep5_8diff, pars = plot_pars) %>% 
+    as.data.frame() %>%
+    tibble::rownames_to_column("Parameter") %>%
+    mutate(Model = "Ndep_5km_8yr")
 )) %>%
   arrange(Model)%>% 
   mutate(across(Estimate:Q97.5, round, 3)) %>%
@@ -1559,8 +1613,8 @@ param_summaries <- do.call(rbind, list(
   pivot_wider(names_from = c(Model, name), names_sep = "__") %>%
   mutate(across(ends_with("Estimate"),as.numeric))
 writexl::write_xlsx(param_summaries, 
-                    paste0("Outputs/Models/Difference/Univariate_measerror/",
-                           "Parameter_summary_1km_v_5km_nicetable.xlsx"))
+                    paste0(mdr,
+                           "Parameter_summary_1km_v_5km_8v20_nicetable.xlsx"))
 
 
 # Multivariate ####
@@ -4106,6 +4160,14 @@ summary(mod_smuw)
 plot(mod_smuw)
 pp_check(mod_smuw, nsamples = 50, resp = "Ell")
 pp_check(mod_smuw, nsamples = 50, resp = "PH")
+
+mod_smuw_samp <- posterior_samples(mod_smuw)
+cor(mod_smuw_samp$b_PH_Sdep, mod_smuw_samp$b_PH_Ndep)
+# 0.7356504
+plot(mod_smuw_samp$b_PH_Sdep, mod_smuw_samp$b_PH_Ndep)
+psych::pairs.panels(mod_smuw_samp[,grep("^b_PH",
+                                        colnames(mod_smuw_samp), 
+                                        value = TRUE)])
 
 # plot(conditional_effects(mod_smuw))
 
