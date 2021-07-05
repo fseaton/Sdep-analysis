@@ -342,6 +342,57 @@ ELL_QA_diff <- data.frame(
   ELL_SM_UW_SE_NORM = c(0.333,0.385,0.443)
 )
 
+# Species data ####
+Sp_Ell <- CS07_SP %>%
+  left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
+  filter(PLOT_TYPE == "X")  %>%
+  mutate(Year = 2007) %>%
+  select(REP_ID, Year, BRC_NUMBER, TOTAL_COVER) %>% unique() %>%
+  full_join(unique(select(mutate(filter(CS19_SP, 
+                                        PLOT_TYPE == "X"), Year = 2019),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS98_SP, grepl("X", REP_ID)), Year = 1998),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS90_SP, grepl("X", REP_ID)), Year = 1990),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS78_SP, grepl("X", REP_ID)), Year = 1978),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER = COVER))) %>%
+  na.omit() %>%
+  left_join(unique(select(SPECIES_LIB_TRAITS, BRC_NUMBER, 
+                          starts_with("EBER")))) %>%
+  mutate(across(starts_with("EBER"), na_if, y = 0)) %>%# set 0 values to NA
+  select(BRC_NUMBER, EBERGR) %>%
+  unique() %>%
+  left_join(select(MMove_lookup, BRC_NUMBER = BSBI_BRC,
+                   BUTTLARVFOOD, KgSughacovyr, Low_grass) %>%
+              mutate(BUTTLARVFOOD = replace_na(BUTTLARVFOOD, 0),
+                     KgSughacovyr = ifelse(replace_na(KgSughacovyr,0) > 0, 1, 0)))
+
+X_whole_F <- X_Ell_whole <- CS07_SP %>%
+  left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
+  filter(PLOT_TYPE == "X")  %>%
+  mutate(Year = 2007) %>%
+  select(REP_ID, Year, BRC_NUMBER, TOTAL_COVER) %>% unique() %>%
+  full_join(unique(select(mutate(filter(CS19_SP, 
+                                        PLOT_TYPE == "X"), Year = 2019),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS98_SP, grepl("X", REP_ID)), Year = 1998),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS90_SP, grepl("X", REP_ID)), Year = 1990),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS78_SP, grepl("X", REP_ID)), Year = 1978),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER = COVER))) %>%
+  na.omit() %>%
+  left_join(select(MMove_lookup, BRC_NUMBER = BSBI_BRC,
+                   F_Butt = BUTTLARVFOOD, 
+                   F_Nectar = KgSughacovyr, 
+                   F_Lgrass = Low_grass) %>%
+              mutate(F_Butt = replace_na(F_Butt, 0),
+                     F_Nectar = ifelse(replace_na(F_Nectar,0) > 0, 1, 0))) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(across(starts_with("F_"), mean, na.rm = TRUE))
+
+Ell_F <- full_join(X_Ell_whole, X_whole_F)
 
 # pH data ####
 UK19_PH <- UK19_PH %>%
@@ -1194,3 +1245,115 @@ for(i in 1:nrow(CS_plot_atdep)) {
 }
 
 CS_plot_atdep_5km <- left_join(CS_plot_atdep5km, AtmosDep_5km_nona)
+
+# Atmos dep at 5km 8yr ####
+str(Ndep_avg)
+
+Ndep_avg_cumsum <- Ndep_avg %>%
+  mutate(Navg_cumdep78 = rowSums(select(.,gridavg_1970:gridavg_1978)),
+         Navg_cumdep90 = rowSums(select(.,gridavg_1982:gridavg_1990)),
+         Navg_cumdep98 = rowSums(select(.,gridavg_1990:gridavg_1998)),
+         Navg_cumdep07 = rowSums(select(.,gridavg_1999:gridavg_2007)),
+         Navg_cumdep18 = rowSums(select(.,gridavg_2010:gridavg_2018))) %>%
+  select(x,y,contains("cumdep"))
+
+Ndep_for_cumsum <- Ndep_for %>%
+  mutate(Nfor_cumdep78 = rowSums(select(.,forest_1970:forest_1978)),
+         Nfor_cumdep90 = rowSums(select(.,forest_1982:forest_1990)),
+         Nfor_cumdep98 = rowSums(select(.,forest_1990:forest_1998)),
+         Nfor_cumdep07 = rowSums(select(.,forest_1999:forest_2007)),
+         Nfor_cumdep18 = rowSums(select(.,forest_2010:forest_2018))) %>%
+  select(x,y,contains("cumdep"))
+
+Ndep_moo_cumsum <- Ndep_moo %>%
+  mutate(Nmoo_cumdep78 = rowSums(select(.,moor_1970:moor_1978)),
+         Nmoo_cumdep90 = rowSums(select(.,moor_1982:moor_1990)),
+         Nmoo_cumdep98 = rowSums(select(.,moor_1990:moor_1998)),
+         Nmoo_cumdep07 = rowSums(select(.,moor_1999:moor_2007)),
+         Nmoo_cumdep18 = rowSums(select(.,moor_2010:moor_2018))) %>%
+  select(x,y,contains("cumdep"))
+
+Ndep_5km_cumsum <- full_join(Ndep_avg_cumsum, 
+                             Ndep_for_cumsum) %>%
+  full_join(Ndep_moo_cumsum)
+
+Ndep_5km_cumsum70 <- Ndep_5km_cumsum %>%
+  melt(id.vars = c("x","y"), variable.factor = FALSE, 
+       value.name = "Ndep") %>%
+  mutate(Year = recode(substring(variable,12,13),
+                       "78" = 1978,
+                       "90" = 1990,
+                       "98" = 1998,
+                       "07" = 2007,
+                       "18" = 2018),
+         Habitat = recode(substring(variable, 2,4),
+                          "avg" = "gridavg",
+                          "for" = "forest",
+                          "moo" = "moor")) %>% select(-variable)
+
+str(Sdep_avg)
+Sdep_avg_change <- Sdep_avg %>%
+  mutate(Savg_change78 = gridavg_1978 - gridavg_1970,
+         Savg_change90 = gridavg_1990 - gridavg_1982,
+         Savg_change98 = gridavg_1998 - gridavg_1990,
+         Savg_change07 = gridavg_2007 - gridavg_1999,
+         Savg_change18 = gridavg_2018 - gridavg_2010) %>%
+  select(x,y,contains("change"))
+
+Sdep_for_change <- Sdep_for %>%
+  mutate(Sfor_change78 = forest_1978 - forest_1970,
+         Sfor_change90 = forest_1990 - forest_1982,
+         Sfor_change98 = forest_1998 - forest_1990,
+         Sfor_change07 = forest_2007 - forest_1999,
+         Sfor_change18 = forest_2018 - forest_2010) %>%
+  select(x,y,contains("change"))
+
+Sdep_moo_change <- Sdep_moo %>%
+  mutate(Smoo_change78 = moor_1978 - moor_1970,
+         Smoo_change90 = moor_1990 - moor_1982,
+         Smoo_change98 = moor_1998 - moor_1990,
+         Smoo_change07 = moor_2007 - moor_1999,
+         Smoo_change18 = moor_2018 - moor_2010) %>%
+  select(x,y,contains("change"))
+
+Sdep_5km_change <- full_join(Sdep_avg_change, 
+                             Sdep_for_change) %>%
+  full_join(Sdep_moo_change)
+
+Sdep_5km_change70 <- Sdep_5km_change %>%
+  melt(id.vars = c("x","y"), variable.factor = FALSE, 
+       value.name = "Sdep") %>%
+  mutate(Year = recode(substring(variable,12,13),
+                       "78" = 1978,
+                       "90" = 1990,
+                       "98" = 1998,
+                       "07" = 2007,
+                       "18" = 2018),
+         Habitat = recode(substring(variable, 2,4),
+                          "avg" = "gridavg",
+                          "for" = "forest",
+                          "moo" = "moor")) %>% select(-variable)
+
+AtmosDep_5km8yr <- full_join(Ndep_5km_cumsum70, Sdep_5km_change70)
+AtmosDep_5km8yr_nona <- na.omit(AtmosDep_5km8yr)
+
+CS_plot_atdep5km8yr <- data.frame(
+  REPEAT_PLOT_ID = allplot_loc$REPEAT_PLOT_ID) %>%
+  cbind(st_coordinates(allplot_loc)) %>%
+  left_join(CS_REP_ID_LONG) %>%
+  select(plot_x = X, plot_y = Y, REP_ID = REPEAT_PLOT_ID, Year) %>%
+  mutate(Year = ifelse(Year == 2019, 2018, Year)) %>%
+  left_join(CS_habs) %>%
+  mutate(Habitat = replace_na(Habitat, "gridavg"),
+         x = NA, y = NA)
+
+# match to atmospheric deposition data
+dep_x <- AtmosDep_5km8yr_nona$x
+dep_y <- AtmosDep_5km8yr_nona$y
+
+for(i in 1:nrow(CS_plot_atdep5km8yr)) {
+  CS_plot_atdep5km8yr[i,"x"] <- dep_x[which.min(abs(dep_x - CS_plot_atdep5km8yr$plot_x[i]))]
+  CS_plot_atdep5km8yr[i,"y"] <- dep_y[which.min(abs(dep_y - CS_plot_atdep5km8yr$plot_y[i]))]
+}
+
+CS_plot_atdep5km8yr <- left_join(CS_plot_atdep5km8yr, AtmosDep_5km8yr_nona)

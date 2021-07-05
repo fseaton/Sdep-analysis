@@ -38,6 +38,7 @@ GM16_IBD <- dbReadTable(channelg, SQL("GMEP_DERIVED.WP6_IBD_YRS1234"))
 SPECIES_LIB_TRAITS <- dbReadTable(FEGEN, SQL("CSVEG.LUS_SP_LIB_AND_TRAITS"))
 SPECIES_LIB_CODES <- dbReadTable(FEGEN, SQL("CSVEG.LUS_SP_LIB_CODES_NEW"))
 BHPH_NAMES <- dbReadTable(FEGEN, SQL("CSVEG.BHPH_NAMES"))
+MMove_lookup <- read.csv("~/Data/MMove_BSBI_lookup_v2.csv")
 
 # plant species records
 CS19_SP <- dbReadTable(FEGEN, SQL("CSVEG.VEGETATION_PLOT_SP_161819"))
