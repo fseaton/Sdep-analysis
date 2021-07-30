@@ -1733,17 +1733,28 @@ Sp_Ell %>%
   pivot_wider(names_from = Function, values_from = prop)
 
 p1 <- Sp_Ell %>%
+  select(BRC_NUMBER, EBERGR, BUTTLARVFOOD, 
+         KgSughacovyr,Low_grass) %>%
   unique() %>%
-  na.omit() %>%
-  pivot_longer(BUTTLARVFOOD:Low_grass, names_to = "Function",
+  filter(!is.na(EBERGR)) %>%
+  mutate(Total = 1) %>%
+  group_by(EBERGR) %>%
+  summarise(across(BUTTLARVFOOD:Total, sum, na.rm = TRUE)) %>%
+  pivot_longer(c(BUTTLARVFOOD:Low_grass), names_to = "Function",
+               values_to = "Yes_Functional") %>%
+  mutate(Not_functional = Total - Yes_Functional) %>%
+  pivot_longer(c(Not_functional, Yes_Functional), names_to = "Something",
                values_to = "Count") %>%
-  mutate(Count = ifelse(Count == 1, "Yes","No"),
-         Function = recode(Function, 
+  # unique() %>%
+  # na.omit() %>%
+  # pivot_longer(c(BUTTLARVFOOD,KgSughacovyr,Low_grass), names_to = "Function",
+  #              values_to = "Count") %>%
+  mutate(Function = recode(Function, 
                            "BUTTLARVFOOD" = "Butterfly larvae food",
                            "KgSughacovyr" = "Nectar producing",
                            "Low_grass" = "Lowland grass indicators")) %>%
-  ggplot(aes(x = EBERGR, fill = Count)) +
-  geom_bar(position = "stack") +
+  ggplot(aes(x = EBERGR, y = Count, fill = Something)) +
+  geom_bar(stat = "identity") +
   scale_fill_manual(values = c("grey","black")) +
   facet_wrap(~Function, ncol = 1) +
   labs(x = "Ellenberg R", y = "Number of plant species") +
@@ -1753,13 +1764,15 @@ p1 <- Sp_Ell %>%
   NULL
 
 p2 <- Ell_F %>%
-  select(Year, REP_ID, WH_R, starts_with("F_")) %>%
+  select(Year, REP_ID, WH_R, F_BUTTLARVFOOD,
+         F_KgSughacovyr,
+         F_Low_grass) %>%
   pivot_longer(starts_with("F_"), names_to = "Function",
                values_to = "value") %>%
   mutate(Function = recode(Function, 
-                           "F_Butt" = "Butterfly larvae food",
-                           "F_Nectar" = "Nectar producing",
-                           "F_Lgrass" = "Lowland grass indicators")) %>%
+                           "F_BUTTLARVFOOD" = "Butterfly larvae food",
+                           "F_KgSughacovyr" = "Nectar producing",
+                           "F_Low_grass" = "Lowland grass indicators")) %>%
   ggplot(aes(x = WH_R, y = value))+
   geom_point(alpha = 0.1, colour = "#0072B2") +
   facet_wrap(~Function, ncol = 1) +
@@ -1771,13 +1784,15 @@ p2 <- Ell_F %>%
   NULL
 
 p3 <- Ell_F %>%
-  select(Year, REP_ID, WH_R, starts_with("Fr")) %>%
+  select(Year, REP_ID, WH_R, Fr_BUTTLARVFOOD,
+         Fr_KgSughacovyr,
+         Fr_Low_grass) %>%
   pivot_longer(starts_with("Fr"), names_to = "Function",
                values_to = "value") %>%
   mutate(Function = recode(Function, 
-                           "Fr_Butt" = "Butterfly larvae food",
-                           "Fr_Nectar" = "Nectar producing",
-                           "Fr_Lgrass" = "Lowland grass indicators")) %>%
+                           "Fr_BUTTLARVFOOD" = "Butterfly larvae food",
+                           "Fr_KgSughacovyr" = "Nectar producing",
+                           "Fr_Low_grass" = "Lowland grass indicators")) %>%
   ggplot(aes(x = WH_R, y = value))+
   geom_point(alpha = 0.1, colour = "#0072B2") +
   facet_wrap(~Function, ncol = 1) +
@@ -1792,6 +1807,140 @@ p1 + p2 + p3
 ggsave("Ellenberg R and plant functions.png",
        path = "Outputs/Graphs/",
        width = 25, height = 15, units=  "cm")
+p1+p3
+ggsave("Ellenberg R and plant functions cols 1 and 3.png",
+       path = "Outputs/Graphs/",
+       width = 18, height = 15, units=  "cm")
+
+p1 <- Sp_Ell %>%
+  select(-starts_with("nrec"),-contains("name"),
+         -Sphag_SPECIES) %>%
+  unique() %>%
+  filter(!is.na(EBERGR)) %>%
+  mutate(Total = 1) %>%
+  group_by(EBERGR) %>%
+  summarise(across(Coastal:Total, sum, na.rm = TRUE)) %>%
+  pivot_longer(c(Coastal:Arable), names_to = "Function",
+               values_to = "Yes_Functional") %>%
+  mutate(Not_functional = Total - Yes_Functional) %>%
+  pivot_longer(c(Not_functional, Yes_Functional), names_to = "Something",
+               values_to = "Count") %>%
+  # mutate(Count = ifelse(Count == 1, "Yes","No")) %>%
+  ggplot(aes(x = EBERGR, y = Count, fill = Something)) +
+  geom_bar(position = "stack", stat = "identity") +
+  scale_fill_manual(values = c("grey","black")) +
+  facet_wrap(~Function, ncol = 1) +
+  labs(x = "Ellenberg R", y = "Number of plant species") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        panel.grid = element_blank()) +
+  NULL
+
+p2 <- Ell_F %>%
+  select(Year, REP_ID, WH_R, starts_with("F_")) %>%
+  select(-F_Sphag_SPECIES) %>%
+  filter(!is.na(WH_R)) %>%
+  pivot_longer(starts_with("F_"), names_to = "Function",
+               values_to = "value") %>%
+  ggplot(aes(x = WH_R, y = value))+
+  geom_point(alpha = 0.1, colour = "#0072B2") +
+  facet_wrap(~Function, ncol = 1) +
+  labs(x = "Ellenberg R", y = "Proportion of plant species") +
+  theme_minimal() +
+  # geom_smooth() +
+  theme(axis.line = element_line(colour = "grey"),
+        panel.grid = element_blank()) +
+  NULL
+
+p3 <- Ell_F %>%
+  select(Year, REP_ID, WH_R, starts_with("Fr")) %>%
+  select(-Fr_Sphag_SPECIES) %>%
+  filter(!is.na(WH_R)) %>%
+  pivot_longer(starts_with("Fr"), names_to = "Function",
+               values_to = "value") %>%
+  mutate(Function = recode(Function, 
+                           "Fr_Butt" = "Butterfly larvae food",
+                           "Fr_Nectar" = "Nectar producing",
+                           "Fr_Lgrass" = "Lowland grass indicators")) %>%
+  ggplot(aes(x = WH_R, y = value))+
+  geom_point(alpha = 0.1, colour = "#0072B2") +
+  facet_wrap(~Function, ncol = 1,
+             scales = "free_y") +
+  labs(x = "Ellenberg R", y = "Group richness") +
+  theme_minimal() +
+  # geom_smooth() +
+  theme(axis.line = element_line(colour = "grey"),
+        panel.grid = element_blank()) +
+  NULL
+
+p1 + p2 + p3
+ggsave("Ellenberg R and plant functions v2.png",
+       path = "Outputs/Graphs/",
+       width = 25, height = 100, units=  "cm")
+
+
+p1 <- Sp_Ell %>%
+  select(BRC_NUMBER, EBERGR, BUTTLARVFOOD, 
+         KgSughacovyr,Low_grass,Cwr,BIRDFOOD,
+         Forage_grasses, IW) %>%
+  unique() %>%
+  filter(!is.na(EBERGR)) %>%
+  mutate(Total = 1) %>%
+  group_by(EBERGR) %>%
+  summarise(across(BUTTLARVFOOD:Total, sum, na.rm = TRUE)) %>%
+  pivot_longer(c(BUTTLARVFOOD:IW), names_to = "Function",
+               values_to = "Yes_Functional") %>%
+  mutate(Not_functional = Total - Yes_Functional) %>%
+  pivot_longer(c(Not_functional, Yes_Functional), names_to = "Something",
+               values_to = "Count") %>%
+  mutate(Function = recode(Function,
+                           "BUTTLARVFOOD" = "Butterfly larvae food",
+                           "KgSughacovyr" = "Nectar producing",
+                           "Low_grass" = "Lowland grass indicators",
+                           "BIRDFOOD" = "Bird food",
+                           "Cwr" = "Crop wild relatives",
+                           "Forage_grasses" = "Forage grasses",
+                           "IW" = "Injurious weeds")) %>%
+  ggplot(aes(x = EBERGR, y = Count, fill = Something)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("grey","black")) +
+  facet_wrap(~Function, ncol = 1) +
+  labs(x = "Ellenberg R", y = "Number of plant species") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        panel.grid = element_blank()) +
+  NULL
+
+p3 <- Ell_F %>%
+  select(Year, REP_ID, WH_R, Fr_BUTTLARVFOOD,
+         Fr_KgSughacovyr,
+         Fr_Low_grass,Fr_Low_grass,Fr_Cwr,Fr_BIRDFOOD,
+         Fr_Forage_grasses, Fr_IW) %>%
+  pivot_longer(starts_with("Fr"), names_to = "Function",
+               values_to = "value") %>%
+  mutate(Function = recode(Function,
+                           "Fr_BUTTLARVFOOD" = "Butterfly larvae food",
+                           "Fr_KgSughacovyr" = "Nectar producing",
+                           "Fr_Low_grass" = "Lowland grass indicators",
+                           "Fr_BIRDFOOD" = "Bird food",
+                           "Fr_Cwr" = "Crop wild relatives",
+                           "Fr_Forage_grasses" = "Forage grasses",
+                           "Fr_IW" = "Injurious weeds")) %>%
+  ggplot(aes(x = WH_R, y = value))+
+  geom_point(alpha = 0.1, colour = "#0072B2") +
+  facet_wrap(~Function, ncol = 1, scales = "free_y") +
+  labs(x = "Ellenberg R", y = "Group richness") +
+  theme_minimal() +
+  # geom_smooth() +
+  theme(axis.line = element_line(colour = "grey"),
+        panel.grid = element_blank()) +
+  NULL
+
+p1 + p3
+ggsave("Ellenberg R and plant functions v3.png",
+       path = "Outputs/Graphs/",
+       width = 15, height = 25, units=  "cm")
+
 
 ggplot(X_Ell_nect, aes(x = WH_R, y = Nectar)) + 
   geom_point(alpha = 0.1) +

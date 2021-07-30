@@ -363,12 +363,59 @@ Sp_Ell <- CS07_SP %>%
   mutate(across(starts_with("EBER"), na_if, y = 0)) %>%# set 0 values to NA
   select(BRC_NUMBER, EBERGR) %>%
   unique() %>%
-  left_join(select(MMove_lookup, BRC_NUMBER = BSBI_BRC,
-                   BUTTLARVFOOD, KgSughacovyr, Low_grass) %>%
-              mutate(BUTTLARVFOOD = replace_na(BUTTLARVFOOD, 0),
-                     KgSughacovyr = ifelse(replace_na(KgSughacovyr,0) > 0, 1, 0)))
+  left_join(rename(MMove_lookup, BRC_NUMBER = BSBI_BRC) %>%
+              mutate(across(Coastal:Arable, ~ifelse(replace_na(na_if(.x,""),0)!=0,1,0))))
 
-X_whole_F <- X_Ell_whole <- CS07_SP %>%
+X_whole_F <- CS07_SP %>%
+  left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
+  filter(PLOT_TYPE == "X")  %>%
+  mutate(Year = 2007) %>%
+  select(REP_ID, Year, BRC_NUMBER, TOTAL_COVER) %>% unique() %>%
+  full_join(unique(select(mutate(filter(CS19_SP, 
+                                        PLOT_TYPE == "X"), Year = 2019),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS98_SP, grepl("X", REP_ID)), Year = 1998),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS90_SP, grepl("X", REP_ID)), Year = 1990),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS78_SP, grepl("X", REP_ID)), Year = 1978),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER = COVER))) %>%
+  na.omit() %>%
+  left_join(rename(MMove_lookup, BRC_NUMBER = BSBI_BRC) %>%
+              select(-starts_with("nrec"), -contains("name"), -MMove_BRC) %>%
+              rename_with(~paste0("F_",.x), Coastal:Arable) %>%
+              mutate(across(starts_with("F_"), ~ifelse(replace_na(na_if(.x,""),0)!=0,1,0)))) %>%
+  mutate(across(starts_with("F_"), replace_na, 0)) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(across(starts_with("F_"), mean, na.rm = TRUE)) %>%
+  ungroup()
+X_whole_F_rich <- CS07_SP %>%
+  left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
+  filter(PLOT_TYPE == "X")  %>%
+  mutate(Year = 2007) %>%
+  select(REP_ID, Year, BRC_NUMBER, TOTAL_COVER) %>% unique() %>%
+  full_join(unique(select(mutate(filter(CS19_SP, 
+                                        PLOT_TYPE == "X"), Year = 2019),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS98_SP, grepl("X", REP_ID)), Year = 1998),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS90_SP, grepl("X", REP_ID)), Year = 1990),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER))) %>%
+  full_join(unique(select(mutate(filter(CS78_SP, grepl("X", REP_ID)), Year = 1978),
+                          REP_ID, Year, BRC_NUMBER, TOTAL_COVER = COVER))) %>%
+  na.omit() %>%
+  left_join(rename(MMove_lookup, BRC_NUMBER = BSBI_BRC) %>%
+              select(-starts_with("nrec"), -contains("name"), -MMove_BRC) %>%
+              rename_with(~paste0("Fr_",.x), Coastal:Arable) %>%
+              mutate(across(starts_with("Fr_"), ~ifelse(replace_na(na_if(.x,""),0)!=0,1,0)))) %>%
+  group_by(Year, REP_ID) %>%
+  summarise(across(starts_with("Fr_"), ~sum(.x>0, na.rm = TRUE))) %>%
+  ungroup()
+
+Ell_F <- full_join(X_Ell_whole, X_whole_F) %>%
+  full_join(X_whole_F_rich)
+
+X_nectar <- CS07_SP %>%
   left_join(select(CS07_PLOTS, VEG_PLOTS_ID, REP_ID, PLOT_TYPE)) %>%
   filter(PLOT_TYPE == "X")  %>%
   mutate(Year = 2007) %>%
@@ -384,15 +431,12 @@ X_whole_F <- X_Ell_whole <- CS07_SP %>%
                           REP_ID, Year, BRC_NUMBER, TOTAL_COVER = COVER))) %>%
   na.omit() %>%
   left_join(select(MMove_lookup, BRC_NUMBER = BSBI_BRC,
-                   F_Butt = BUTTLARVFOOD, 
-                   F_Nectar = KgSughacovyr, 
-                   F_Lgrass = Low_grass) %>%
-              mutate(F_Butt = replace_na(F_Butt, 0),
-                     F_Nectar = ifelse(replace_na(F_Nectar,0) > 0, 1, 0))) %>%
+                   Nectar = KgSughacovyr) %>%
+              mutate(Nectar = replace_na(Nectar,0))) %>%
   group_by(Year, REP_ID) %>%
-  summarise(across(starts_with("F_"), mean, na.rm = TRUE))
+  summarise(Nectar = sum(Nectar*0.01*TOTAL_COVER, na.rm = TRUE))
 
-Ell_F <- full_join(X_Ell_whole, X_whole_F)
+X_Ell_nect <- full_join(X_Ell_whole, X_nectar)
 
 # pH data ####
 UK19_PH <- UK19_PH %>%
